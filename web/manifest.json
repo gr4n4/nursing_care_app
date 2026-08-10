@@ -1,11 +1,11 @@
 {
-    "name": "nursing_care_app",
-    "short_name": "nursing_care_app",
+    "name": "Care Note",
+    "short_name": "Care Note",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#EAF8F6",
+    "theme_color": "#7CCFC6",
+    "description": "식사 · 수분 · 배설 통합 관리",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1,0 +1,39 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "nursing-care-app-702b7",
+          "appId": "1:616337186483:android:d8d33a1f02fff019965ac6",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "nursing-care-app-702b7",
+          "configurations": {
+            "android": "1:616337186483:android:d8d33a1f02fff019965ac6",
+            "ios": "1:616337186483:ios:da0c7f2fd09e9326965ac6",
+            "macos": "1:616337186483:ios:da0c7f2fd09e9326965ac6",
+            "web": "1:616337186483:web:d18da56f0dfd5828965ac6",
+            "windows": "1:616337186483:web:d42632af4f36d02f965ac6"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

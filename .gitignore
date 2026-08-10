@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase Hosting 배포 캐시 (재생성됨 — 버전관리 불필요)
+.firebase/
+
+# 에이전트/스킬 툴링 (앱 소스 아님)
+.agents/
+skills-lock.json
