@@ -6,19 +6,26 @@ import '../utils/care_date.dart';
 import '../utils/feedback.dart';
 import 'patient_profile_edit_page.dart';
 
+/// 섭취 입력 화면에서 보여줄 섹션.
+/// null이면 4개 전부(기존 동작), 지정하면 그 섹션만 보여줘 스크롤을 줄인다.
+///  meal   = 경구식(직접섭취)      · tubeIv = 수액(IV)
+///  drink  = 수분섭취(음료 포함)   · fruit  = 기타섭취(과일)
+enum IntakeSection { meal, tubeIv, drink, fruit }
+
 /// 간호사가 특정 환자의 식사량 · 수분 · 기타 섭취(과일)를 기록하는 화면.
-/// 접이식 카드 3개(식사량 / 수분량 / 기타 섭취)로 구성되며, 각 품목은
-/// 제공량(1회 기준 g)을 연필로 수정할 수 있고 그에 맞춰 수분량이 환산된다.
+/// section 을 주면 해당 항목 하나만, 주지 않으면 접이식 카드 4개 전부를 보여준다.
 class IntakeRecordPage extends StatefulWidget {
   final String patientId;
   final String patientName;
   final String room;
+  final IntakeSection? section;
 
   const IntakeRecordPage({
     super.key,
     required this.patientId,
     required this.patientName,
     required this.room,
+    this.section,
   });
 
   @override
@@ -72,7 +79,6 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
   int side4Serving = 0;
 
   final TextEditingController waterController = TextEditingController();
-  final TextEditingController tubeController = TextEditingController();
   final TextEditingController ivController = TextEditingController();
 
   // 수분/과일: 품목별 섭취비율 + 제공량 override
@@ -101,7 +107,6 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
   @override
   void dispose() {
     waterController.dispose();
-    tubeController.dispose();
     ivController.dispose();
     super.dispose();
   }
@@ -455,38 +460,25 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
   }
 
   Future<void> saveTubeIv() async {
-    final col = FirebaseFirestore.instance.collection('water_records');
-    final batch = FirebaseFirestore.instance.batch();
-    int count = 0;
-
-    final tube = int.tryParse(tubeController.text.trim()) ?? 0;
     final iv = int.tryParse(ivController.text.trim()) ?? 0;
 
-    if (tube > 0) {
-      batch.set(col.doc(), waterRecordBase('관급식', tube, 'tube'));
-      count++;
-    }
-    if (iv > 0) {
-      batch.set(col.doc(), waterRecordBase('수액', iv, 'iv'));
-      count++;
-    }
-
-    if (count == 0) {
+    if (iv <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('관급식 또는 수액 양을 입력해주세요.')),
+        const SnackBar(content: Text('수액 양을 입력해주세요.')),
       );
       return;
     }
 
-    await batch.commit();
+    await FirebaseFirestore.instance
+        .collection('water_records')
+        .add(waterRecordBase('수액', iv, 'iv'));
     if (!mounted) return;
 
     setState(() {
-      tubeController.clear();
       ivController.clear();
       showTube = false;
     });
-    showSaveSuccess(context, message: '관급식·수액 $count건이 기록되었습니다.');
+    showSaveSuccess(context, message: '수액 기록이 저장되었습니다.');
   }
 
   Future<void> deleteWaterRecord(String docId) async {
@@ -1587,21 +1579,14 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
 
   Widget tubeIvCard() {
     return accordionCard(
-      icon: Icons.medical_services_rounded,
-      title: '관급식 · 수액',
-      subtitle: '경구 관급식과 비경구 수액(IV)을 ml로 기록합니다.',
+      icon: Icons.water_drop_rounded,
+      title: '수액',
+      subtitle: '비경구 수액(IV)을 ml로 기록합니다.',
       expanded: showTube,
       onToggle: () => setState(() => showTube = !showTube),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          mlPresetEntry(
-            label: '관급식 (경구)',
-            hint: '관급식량',
-            controller: tubeController,
-            icon: Icons.rice_bowl_rounded,
-            color: mintDark,
-          ),
           mlPresetEntry(
             label: '수액 (비경구 · IV)',
             hint: '수액량',
@@ -1617,12 +1602,41 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
               style: primaryButtonStyle,
               onPressed: saveTubeIv,
               icon: const Icon(Icons.save_rounded),
-              label: const Text('관급식·수액 기록 저장'),
+              label: const Text('수액 기록 저장'),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // section 이 지정되면 그 카드 하나만, null 이면 4개 전부를 14px 간격으로 쌓는다.
+  List<Widget> sectionCards() {
+    final s = widget.section;
+    final cards = <Widget>[];
+
+    if (s == null || s == IntakeSection.meal) {
+      cards.add(
+        accordionCard(
+          icon: Icons.restaurant_rounded,
+          title: '식사량',
+          subtitle: '아침·점심·저녁을 눌러 기록합니다.',
+          expanded: showMeal,
+          onToggle: () => setState(() => showMeal = !showMeal),
+          child: mealSection(),
+        ),
+      );
+    }
+    if (s == null || s == IntakeSection.drink) cards.add(waterCard());
+    if (s == null || s == IntakeSection.fruit) cards.add(fruitCard());
+    if (s == null || s == IntakeSection.tubeIv) cards.add(tubeIvCard());
+
+    final spaced = <Widget>[];
+    for (var i = 0; i < cards.length; i++) {
+      if (i > 0) spaced.add(const SizedBox(height: 14));
+      spaced.add(cards[i]);
+    }
+    return spaced;
   }
 
   @override
@@ -1649,23 +1663,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              accordionCard(
-                                icon: Icons.restaurant_rounded,
-                                title: '식사량',
-                                subtitle: '아침·점심·저녁을 눌러 기록합니다.',
-                                expanded: showMeal,
-                                onToggle: () =>
-                                    setState(() => showMeal = !showMeal),
-                                child: mealSection(),
-                              ),
-                              const SizedBox(height: 14),
-                              waterCard(),
-                              const SizedBox(height: 14),
-                              fruitCard(),
-                              const SizedBox(height: 14),
-                              tubeIvCard(),
-                            ],
+                            children: sectionCards(),
                           ),
                         ),
                       ],

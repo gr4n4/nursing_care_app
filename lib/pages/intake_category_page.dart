@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 
-import 'output_record_page.dart';
-import 'intake_category_page.dart';
+import 'intake_record_page.dart';
 
-/// 환자를 선택한 뒤 "무엇을 입력하시나요?" (식사량 / 배설량)를 고르는 화면.
-/// 식사량 → IntakeRecordPage(간호사 모드), 배설량 → OutputRecordPage.
-class InputChoicePage extends StatelessWidget {
+/// 환자를 선택하고 "식사량"을 고른 뒤, 섭취 경로별로 4분류를 선택하는 화면.
+///  경구식(직접섭취) / 관급식(수액) / 수분섭취(음료 포함) / 기타섭취(과일)
+/// 각 분류는 IntakeRecordPage 를 해당 section 하나만 보여주는 모드로 연다.
+/// (한 화면에 다 쌓지 않아 스크롤이 크게 줄어든다.)
+class IntakeCategoryPage extends StatelessWidget {
   final String patientId;
   final String patientName;
   final String room;
 
-  const InputChoicePage({
+  const IntakeCategoryPage({
     super.key,
     required this.patientId,
     required this.patientName,
     required this.room,
   });
 
-  static const Color mint = Color(0xFF7CCFC6);
   static const Color mintDark = Color(0xFF0F766E);
   static const Color mintSoft = Color(0xFFE6FAF8);
   static const Color pageBg = Color(0xFFF5F7FA);
@@ -29,35 +29,23 @@ class InputChoicePage extends StatelessWidget {
       ? patientName
       : '${room.trim().replaceAll('호', '')}호 · $patientName';
 
-  Future<void> openMeal(BuildContext context) async {
+  Future<void> openSection(BuildContext context, IntakeSection section) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => IntakeCategoryPage(
+        builder: (_) => IntakeRecordPage(
           patientId: patientId,
           patientName: patientName,
           room: room,
-        ),
-      ),
-    );
-  }
-
-  Future<void> openOutput(BuildContext context) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OutputRecordPage(
-          patientId: patientId,
-          patientName: patientName,
-          room: room,
+          section: section,
         ),
       ),
     );
   }
 
   Widget choiceCard({
-    required BuildContext context,
     required String label,
+    required String subtitle,
     required IconData icon,
     required Color color,
     required Color background,
@@ -70,6 +58,7 @@ class InputChoicePage extends StatelessWidget {
         child: AspectRatio(
           aspectRatio: 1,
           child: Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
@@ -86,21 +75,32 @@ class InputChoicePage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 72,
-                  height: 72,
+                  width: 64,
+                  height: 64,
                   decoration: BoxDecoration(
                     color: background,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(22),
                   ),
-                  child: Icon(icon, color: color, size: 40),
+                  child: Icon(icon, color: color, size: 36),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Text(
                   label,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: textDark,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -125,7 +125,8 @@ class InputChoicePage extends StatelessWidget {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final maxWidth = constraints.maxWidth >= 700 ? 560.0 : constraints.maxWidth;
+            final maxWidth =
+                constraints.maxWidth >= 700 ? 560.0 : constraints.maxWidth;
 
             return SingleChildScrollView(
               child: Center(
@@ -157,42 +158,69 @@ class InputChoicePage extends StatelessWidget {
                         ),
                         const SizedBox(height: 18),
                         const Text(
-                          '무엇을 입력하시나요?',
+                          '어떤 섭취를 기록하시나요?',
                           style: TextStyle(
                             color: textDark,
-                            fontSize: 26,
+                            fontSize: 24,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          '기록할 항목을 선택해주세요.',
+                          '섭취 경로별로 나누어 기록합니다.',
                           style: TextStyle(
                             color: textGrey,
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 24),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             choiceCard(
-                              context: context,
-                              label: '식사량',
+                              label: '경구식',
+                              subtitle: '직접섭취',
                               icon: Icons.restaurant_rounded,
                               color: mintDark,
                               background: mintSoft,
-                              onTap: () => openMeal(context),
+                              onTap: () =>
+                                  openSection(context, IntakeSection.meal),
                             ),
                             const SizedBox(width: 16),
                             choiceCard(
-                              context: context,
-                              label: '배설량',
-                              icon: Icons.water_drop_rounded,
+                              label: '수액',
+                              subtitle: '정맥 주입(IV)',
+                              icon: Icons.vaccines_rounded,
+                              color: const Color(0xFF7C3AED),
+                              background: const Color(0xFFF3E8FF),
+                              onTap: () =>
+                                  openSection(context, IntakeSection.tubeIv),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            choiceCard(
+                              label: '수분섭취',
+                              subtitle: '음료 포함',
+                              icon: Icons.local_drink_rounded,
                               color: const Color(0xFF2563EB),
                               background: const Color(0xFFE8F0FE),
-                              onTap: () => openOutput(context),
+                              onTap: () =>
+                                  openSection(context, IntakeSection.drink),
+                            ),
+                            const SizedBox(width: 16),
+                            choiceCard(
+                              label: '기타섭취',
+                              subtitle: '과일',
+                              icon: Icons.eco_rounded,
+                              color: const Color(0xFFEA580C),
+                              background: const Color(0xFFFFF1E6),
+                              onTap: () =>
+                                  openSection(context, IntakeSection.fruit),
                             ),
                           ],
                         ),

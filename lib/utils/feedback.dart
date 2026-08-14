@@ -59,7 +59,7 @@ class _SuccessDialogState extends State<_SuccessDialog> {
               ),
               const SizedBox(height: 16),
               const Text(
-                '완료되었습니다',
+                '입력이 완료되었습니다',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,

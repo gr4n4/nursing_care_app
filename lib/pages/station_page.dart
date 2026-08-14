@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/food_table.dart';
 import '../utils/care_date.dart';
+import '../utils/feedback.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
 import 'nurse_home_page.dart';
@@ -419,6 +420,10 @@ class _StationPageState extends State<StationPage> {
         'balanceValid': status != '미기록',
         'edemaGrade': toInt(assessmentByPatient[patientId]?['edemaGrade']),
         'stoolType': toInt(assessmentByPatient[patientId]?['stoolType']),
+        // 주의 해제 여부 + 사유 (간호사가 '확인함'으로 처리한 경우)
+        'balanceCleared': assessmentByPatient[patientId]?['balanceCleared'] == true,
+        'balanceReason':
+            (assessmentByPatient[patientId]?['balanceReason'] ?? '').toString(),
         'breakfastRecorded': breakfastRecorded,
         'lunchRecorded': lunchRecorded,
         'dinnerRecorded': dinnerRecorded,
@@ -956,7 +961,189 @@ class _StationPageState extends State<StationPage> {
         .doc(docId)
         .set(data, SetOptions(merge: true));
 
+    if (!mounted) return;
+    showSaveSuccess(context);
     refreshDashboard();
+  }
+
+  // #13 밸런스 '주의' 해제 — 사유를 남기고 상태를 '확인됨'으로.
+  // 경고를 지우는 게 아니라 '간호사가 확인했고 사유는 이것'으로 기록한다(노티 누락 방지).
+  Future<void> saveBalanceClear(
+    String patientId, {
+    required bool cleared,
+    String reason = '',
+  }) async {
+    final docId = '${patientId}_$firestoreDateString';
+    await FirebaseFirestore.instance
+        .collection('daily_assessments')
+        .doc(docId)
+        .set(
+      {
+        'patientId': patientId,
+        'date': firestoreDateString,
+        'balanceCleared': cleared,
+        'balanceReason': cleared ? reason : '',
+        'balanceClearedAt': Timestamp.now(),
+        'updatedAt': Timestamp.now(),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (!mounted) return;
+    showSaveSuccess(context);
+    refreshDashboard();
+  }
+
+  Future<void> showBalanceClearDialog({
+    required String patientId,
+    required String name,
+    required String status,
+    required bool cleared,
+    required String reason,
+  }) async {
+    // 이미 해제됨 → 사유 보기 + 되돌리기
+    if (cleared) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('$name · 주의 해제됨'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '이 환자는 주의가 해제된 상태입니다.',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  reason.isEmpty ? '사유 없음' : reason,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontWeight: FontWeight.w700,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('닫기'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB45309),
+              ),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await saveBalanceClear(patientId, cleared: false);
+              },
+              child: const Text('주의 다시 표시'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // 미해제 → 사유 입력 후 해제(확인 한 번 더)
+    final controller = TextEditingController(text: reason);
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('$name · 주의 해제'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '주의가 뜬 이유를 확인하고 사유를 남기면 상태를 "확인됨"으로 바꿉니다.\n(경고를 숨기는 게 아니라 확인 사실을 기록합니다.)',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: '예) 땀을 많이 흘림 / 설사 / 구토 / 수액 추가',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF15803D),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final text = controller.text.trim();
+                final ok = await showDialog<bool>(
+                  context: ctx,
+                  builder: (c2) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    title: const Text('주의 해제'),
+                    content: const Text('정말 이 환자의 주의를 해제할까요?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c2, false),
+                        child: const Text('아니오'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF15803D),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(c2, true),
+                        child: const Text('해제'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                await saveBalanceClear(patientId, cleared: true, reason: text);
+              },
+              child: const Text('주의 해제'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 
   Future<void> showScaleDialog({
@@ -1077,6 +1264,36 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  // 특이사항 칸의 '상세' 버튼 — 부종/배변타입 토글과 구분되도록 채운(파란) 버튼.
+  Widget detailButton({required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1D4ED8),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.receipt_long_rounded, size: 15, color: Colors.white),
+            SizedBox(width: 5),
+            Text(
+              '상세',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 수분 밸런스 = 섭취수분 − 소변량. |밸런스| > ±500ml 이면 범위 초과 알림.
   Widget balanceCell(int balanceMl, bool valid) {
     if (!valid) {
@@ -1120,27 +1337,45 @@ class _StationPageState extends State<StationPage> {
     return Icons.warning_amber_rounded;
   }
 
-  Widget statusBadge(String status) {
-    return Container(
+  Widget statusBadge(String status, {bool cleared = false, VoidCallback? onTap}) {
+    final String label = cleared ? '확인됨' : status;
+    final Color color =
+        cleared ? const Color(0xFF15803D) : statusBadgeColor(status);
+    final IconData icon = cleared ? Icons.verified_rounded : statusIcon(status);
+
+    final badge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: statusBadgeColor(status),
+        color: color,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon(status), color: Colors.white, size: 16),
+          Icon(icon, color: Colors.white, size: 16),
           const SizedBox(width: 5),
           Text(
-            status,
+            label,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w900,
             ),
           ),
+          // 누를 수 있는 배지엔 아래 화살표로 힌트를 준다.
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more_rounded,
+                color: Colors.white, size: 15),
+          ],
         ],
       ),
+    );
+
+    if (onTap == null) return badge;
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: badge,
     );
   }
 
@@ -1175,6 +1410,323 @@ class _StationPageState extends State<StationPage> {
           ],
         ),
       ],
+    );
+  }
+
+  // ── 환자 클릭 → 오늘 상세 기록 (뭘 먹고/마시고/배설했는지) ──
+  String _mealLabelKo(String t) {
+    if (t == 'breakfast') return '아침';
+    if (t == 'lunch') return '점심';
+    if (t == 'dinner') return '저녁';
+    return t;
+  }
+
+  String _catLabelKo(String c) {
+    switch (c) {
+      case 'drink':
+        return '음료';
+      case 'fruit':
+        return '과일';
+      case 'tube':
+        return '관급식';
+      case 'iv':
+        return '수액';
+      default:
+        return c;
+    }
+  }
+
+  // 식사 문서 → "밥(쌀밥) 전체, 국 ½, 계란찜 전체" 형태의 항목 요약
+  String _mealItemsText(Map<String, dynamic> m) {
+    final parts = <String>[];
+
+    void addItem(String type, dynamic ratio) {
+      final t = type.trim();
+      if (t.isEmpty || t == '없음' || t == '-') return;
+      final r = (ratio ?? '').toString().trim();
+      parts.add(r.isEmpty ? t : '$t $r');
+    }
+
+    addItem((m['stapleType'] ?? '주식').toString(), m['stapleRatio']);
+
+    final soupRatio = (m['soupRatio'] ?? '').toString().trim();
+    if (soupRatio.isNotEmpty &&
+        soupRatio != '없음' &&
+        toInt(m['soupServingGram']) > 0) {
+      parts.add('국 $soupRatio');
+    }
+
+    for (var i = 1; i <= 4; i++) {
+      addItem((m['side${i}Type'] ?? '').toString(), m['side${i}Ratio']);
+    }
+
+    return parts.isEmpty ? '기록됨' : parts.join(', ');
+  }
+
+  String _outputText(Map<String, dynamic> o) {
+    final amount = toInt(o['urineAmount']);
+    final unit = (o['urineUnit'] ?? 'ml').toString();
+    final parts = <String>[];
+    if (amount > 0) parts.add('$amount$unit');
+    if (o['stoolYn'] == true) {
+      final sg = toInt(o['stoolAmount']);
+      parts.add('배변${sg > 0 ? ' ${sg}g' : ''}');
+    }
+    return parts.isEmpty ? '기록됨' : parts.join(' · ');
+  }
+
+  Widget _detailSection(
+    String title,
+    IconData icon,
+    Color color,
+    List<Widget> children,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _detailLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 74,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF475569),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailEmpty() {
+    return const Text(
+      '아직 기록이 없습니다.',
+      style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+    );
+  }
+
+  Future<void> showPatientDetailDialog({
+    required String patientId,
+    required String name,
+    required String room,
+    required int age,
+  }) async {
+    final db = FirebaseFirestore.instance;
+
+    final mealSnap = await db
+        .collection('meal_records')
+        .where('patientId', isEqualTo: patientId)
+        .where('date', isEqualTo: firestoreDateString)
+        .get();
+    final waterSnap = await db
+        .collection('water_records')
+        .where('patientId', isEqualTo: patientId)
+        .where('date', isEqualTo: firestoreDateString)
+        .get();
+    final outputSnap = await db
+        .collection('output_records')
+        .where('patientId', isEqualTo: patientId)
+        .where('date', isEqualTo: firestoreDateString)
+        .get();
+    final assessDoc = await db
+        .collection('daily_assessments')
+        .doc('${patientId}_$firestoreDateString')
+        .get();
+
+    if (!mounted) return;
+
+    const mealOrder = {'breakfast': 0, 'lunch': 1, 'dinner': 2};
+    final meals = mealSnap.docs.map((d) => d.data()).toList()
+      ..sort((a, b) => (mealOrder[a['mealType']] ?? 9)
+          .compareTo(mealOrder[b['mealType']] ?? 9));
+
+    final Map<String, List<Map<String, dynamic>>> waterByCat = {};
+    for (final d in waterSnap.docs) {
+      final data = d.data();
+      final cat = (data['category'] ?? 'drink').toString();
+      waterByCat.putIfAbsent(cat, () => []).add(data);
+    }
+    final hasWater = waterByCat.isNotEmpty;
+
+    final outputs = outputSnap.docs.map((d) => d.data()).toList();
+
+    final assess = assessDoc.data();
+    final edema = toInt(assess?['edemaGrade']);
+    final stool = toInt(assess?['stoolType']);
+    final edemaDesc =
+        (edema >= 0 && edema < edemaScale.length) ? edemaScale[edema][2] : '';
+    final stoolDesc =
+        (stool >= 0 && stool < stoolScale.length) ? stoolScale[stool][2] : '';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
+          title: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE6FAF8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  room.isEmpty ? '-' : room,
+                  style: const TextStyle(
+                    color: Color(0xFF0F766E),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      age > 0 ? '$name ($age세)' : name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 19,
+                      ),
+                    ),
+                    Text(
+                      '$todayString ($weekdayString) 기록',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _detailSection(
+                    '식사',
+                    Icons.restaurant_rounded,
+                    const Color(0xFFF59E0B),
+                    [
+                      if (meals.isEmpty) _detailEmpty(),
+                      for (final m in meals)
+                        _detailLine(
+                          _mealLabelKo(m['mealType'].toString()),
+                          '${_mealItemsText(m)}  ·  ${toInt(m['totalFoodGram'])}g / 수분 ${toInt(m['totalFluidMl'])}ml',
+                        ),
+                    ],
+                  ),
+                  _detailSection(
+                    '수분·음료·관급식·수액',
+                    Icons.local_drink_rounded,
+                    const Color(0xFF2563EB),
+                    [
+                      if (!hasWater) _detailEmpty(),
+                      for (final cat in const ['drink', 'fruit', 'tube', 'iv'])
+                        if (waterByCat[cat] != null)
+                          for (final w in waterByCat[cat]!)
+                            _detailLine(
+                              _catLabelKo(cat),
+                              '${w['name']}  ${toInt(w['amountMl'])}ml',
+                            ),
+                    ],
+                  ),
+                  _detailSection(
+                    '배설',
+                    Icons.water_drop_rounded,
+                    const Color(0xFF0EA5E9),
+                    [
+                      if (outputs.isEmpty) _detailEmpty(),
+                      for (final o in outputs)
+                        _detailLine(
+                          (o['urineTypeLabel'] ??
+                                  o['urineMethodLabel'] ??
+                                  '배뇨')
+                              .toString(),
+                          _outputText(o),
+                        ),
+                    ],
+                  ),
+                  _detailSection(
+                    '특이사항',
+                    Icons.assignment_rounded,
+                    const Color(0xFF7C3AED),
+                    [
+                      _detailLine('부종',
+                          edema > 0 ? '+$edema · $edemaDesc' : '미기록'),
+                      _detailLine('배변타입',
+                          stool > 0 ? 'BSS $stool · $stoolDesc' : '미기록'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('닫기'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1268,9 +1820,17 @@ class _StationPageState extends State<StationPage> {
                           return null;
                         }),
                         cells: [
-                          DataCell(Text(item['room'].toString().isEmpty
-                              ? '-'
-                              : '${item['room']}호')),
+                          DataCell(
+                            Text(item['room'].toString().isEmpty
+                                ? '-'
+                                : '${item['room']}호'),
+                            onTap: () => showPatientDetailDialog(
+                              patientId: patientId,
+                              name: patientName,
+                              room: item['room'].toString(),
+                              age: age,
+                            ),
+                          ),
                           DataCell(
                             Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -1297,6 +1857,12 @@ class _StationPageState extends State<StationPage> {
                                   ),
                               ],
                             ),
+                            onTap: () => showPatientDetailDialog(
+                              patientId: patientId,
+                              name: patientName,
+                              room: item['room'].toString(),
+                              age: age,
+                            ),
                           ),
                           DataCell(mealMark(item['breakfastRecorded'])),
                           DataCell(mealMark(item['lunchRecorded'])),
@@ -1318,7 +1884,21 @@ class _StationPageState extends State<StationPage> {
                               item['balanceValid'] == true,
                             ),
                           ),
-                          DataCell(statusBadge(status)),
+                          DataCell(statusBadge(
+                            status,
+                            cleared: item['balanceCleared'] == true,
+                            onTap: (status == '주의' ||
+                                    status.contains('확인') ||
+                                    item['balanceCleared'] == true)
+                                ? () => showBalanceClearDialog(
+                                      patientId: patientId,
+                                      name: patientName,
+                                      status: status,
+                                      cleared: item['balanceCleared'] == true,
+                                      reason: item['balanceReason'].toString(),
+                                    )
+                                : null,
+                          )),
                           DataCell(
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1350,6 +1930,15 @@ class _StationPageState extends State<StationPage> {
                                     color: const Color(0xFF0F766E),
                                     onSelect: (v) =>
                                         saveAssessment(patientId, stoolType: v),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                detailButton(
+                                  onTap: () => showPatientDetailDialog(
+                                    patientId: patientId,
+                                    name: patientName,
+                                    room: item['room'].toString(),
+                                    age: age,
                                   ),
                                 ),
                               ],
@@ -1430,9 +2019,13 @@ class _StationPageState extends State<StationPage> {
   }) {
     final totalPatients = summaries.length;
     final missingCount = summaries.where((e) => e['status'] == '미기록').length;
+    // 주의(±초과)·확인필요라도 간호사가 '주의 해제'한 환자는 경고 집계에서 뺀다.
     final warningCount = summaries
         .where(
-          (e) => e['status'] == '주의' || e['status'].toString().contains('확인'),
+          (e) =>
+              (e['status'] == '주의' ||
+                  e['status'].toString().contains('확인')) &&
+              e['balanceCleared'] != true,
         )
         .length;
     final completedCount = totalPatients - missingCount - warningCount;
@@ -1574,12 +2167,15 @@ class _StationPageState extends State<StationPage> {
                 warningCount: summaries
                     .where(
                       (e) =>
-                          e['status'] == '주의' ||
-                          e['status'].toString().contains('확인'),
+                          (e['status'] == '주의' ||
+                              e['status'].toString().contains('확인')) &&
+                          e['balanceCleared'] != true,
                     )
                     .length,
-                completedCount:
-                    summaries.where((e) => e['status'] == '정상').length,
+                completedCount: summaries
+                    .where((e) =>
+                        e['status'] == '정상' || e['balanceCleared'] == true)
+                    .length,
               ),
               const SizedBox(height: 18),
               dashboardTable(summaries),

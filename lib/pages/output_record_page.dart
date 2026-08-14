@@ -942,7 +942,94 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          bssReference(),
         ],
+      ),
+    );
+  }
+
+  // 배변 척도(BSS) 참고표 — 대시보드와 동일 기준. 입력값이 아니라 간호사 참고용.
+  Widget bssReference() {
+    const List<List<String>> stoolScale = [
+      ['Type 1', '딱딱한 알갱이 · 심한 변비'],
+      ['Type 2', '울퉁불퉁한 소시지형 · 변비'],
+      ['Type 3', '표면에 균열 있는 소시지형 · 정상'],
+      ['Type 4', '매끈한 소시지형 · 정상(이상적)'],
+      ['Type 5', '부드러운 덩어리 · 섬유질 부족 경향'],
+      ['Type 6', '경계 불분명한 죽 형태 · 경증 설사'],
+      ['Type 7', '물 같은 액체 · 설사'],
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          leading:
+              const Icon(Icons.menu_book_rounded, color: Color(0xFF0F766E)),
+          title: const Text(
+            '배변 척도(BSS) 참고표',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          subtitle: const Text(
+            '브리스톨 대변 척도 1~7',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          children: stoolScale.map((row) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 64,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F766E),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      row[0],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        row[1],
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
