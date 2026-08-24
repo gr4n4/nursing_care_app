@@ -50,3 +50,4 @@ app.*.map.json
 # 에이전트/스킬 툴링 (앱 소스 아님)
 .agents/
 skills-lock.json
+scripts/node_modules/

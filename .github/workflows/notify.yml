@@ -1,0 +1,33 @@
+name: 기록 누락 알림
+
+# 15분마다 돌면서 기록이 빠진 환자를 찾아 푸시를 보낸다.
+# 발송 시각·임계값은 코드가 아니라 Firestore settings/notifications 에서 읽으므로,
+# 병동에서 앱의 '알림 설정' 화면으로 바꾸면 다음 실행부터 바로 반영된다.
+#
+# 주의: GitHub Actions의 cron은 UTC 기준이고, 러너가 밀리면 몇 분 늦게 돌 수 있다.
+# 스크립트가 한국시간으로 환산해 판단하므로 여기서는 시간대를 신경 쓰지 않아도 된다.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  # 테스트용 수동 실행. Actions 탭에서 'Run workflow' 버튼으로 즉시 돌릴 수 있다.
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 의존성 설치
+        working-directory: scripts
+        run: npm install --no-audit --no-fund
+
+      - name: 알림 검사 및 발송
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node notify.js

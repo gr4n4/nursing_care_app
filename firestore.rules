@@ -1,0 +1,83 @@
+rules_version = '2';
+
+// Care Note Firestore 보안 규칙.
+//
+// 전제: 로그인 계정은 간호사(nurse)와 관리자(admin)뿐이다.
+// 환자는 계정이 아니라 patients 컬렉션의 문서이므로, 환자 본인 접근 개념이 없다.
+// 따라서 "로그인했는가"가 기본 관문이고, 그 위에 관리자 전용 항목만 좁힌다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myEmail() {
+      return request.auth.token.email;
+    }
+
+    function roleOf(email) {
+      return get(/databases/$(database)/documents/users/$(email)).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(myEmail()))
+        && roleOf(myEmail()) == 'admin';
+    }
+
+    // 계정 문서. 가입 시 본인 문서를 만들고, 이후 본인만 수정한다.
+    // 관리자는 간호사 명단을 봐야 하므로 전체 읽기가 열려 있다.
+    match /users/{email} {
+      allow read: if signedIn();
+      allow create: if signedIn() && email == myEmail();
+      allow update: if signedIn() && (email == myEmail() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // 환자는 병동 공용 풀이라 로그인한 간호사면 누구나 읽고 쓴다
+    // (담당 배정은 assignedNurses 배열로 앱에서 관리한다).
+    match /patients/{patientId} {
+      allow read, write: if signedIn();
+    }
+
+    // 기록류. 간호사가 입력하고 대시보드가 집계한다.
+    match /meal_records/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    match /water_records/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    match /output_records/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    match /daily_assessments/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // 푸시 알림 토큰. 문서 ID = FCM 토큰.
+    // 본인 이메일로 등록한 토큰만 만들고 지울 수 있게 해서,
+    // 남의 기기 등록을 지우거나 가로채지 못하게 한다.
+    // (스케줄러는 서비스 계정으로 접근하므로 이 규칙을 거치지 않는다.)
+    match /push_tokens/{token} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.email == myEmail();
+      allow delete: if signedIn() && resource.data.email == myEmail();
+    }
+
+    // 알림 규칙(발송 시각·임계값). 병동에서 함께 쓰는 설정이라
+    // 로그인한 간호사면 조정할 수 있게 둔다.
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    // 위에 명시하지 않은 경로는 전부 차단한다.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

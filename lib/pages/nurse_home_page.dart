@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/care_date.dart';
 import 'input_choice_page.dart';
 import 'login_page.dart';
+import 'notification_settings_page.dart';
 import 'nurse_profile_edit_page.dart';
 import 'patient_profile_edit_page.dart';
 import 'patient_register_page.dart';
@@ -260,6 +261,13 @@ class _NurseHomePageState extends State<NurseHomePage> {
     refreshPage();
   }
 
+  Future<void> openNotificationSettingsPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
+    );
+  }
+
   Future<void> logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -469,6 +477,11 @@ class _NurseHomePageState extends State<NurseHomePage> {
               label: '관리',
               icon: Icons.manage_accounts_rounded,
               onTap: () => setState(() => manageMode = true),
+            ),
+            const SizedBox(width: 8),
+            headerIconButton(
+              icon: Icons.notifications_active_rounded,
+              onTap: openNotificationSettingsPage,
             ),
             const SizedBox(width: 8),
             headerIconButton(

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +9,7 @@ import '../utils/care_date.dart';
 import '../utils/feedback.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
+import 'notification_settings_page.dart';
 import 'nurse_home_page.dart';
 import 'nurse_profile_edit_page.dart';
 import 'patient_list_page.dart';
@@ -583,6 +586,19 @@ class _StationPageState extends State<StationPage> {
                   );
                 },
               ),
+            sideMenuButton(
+              icon: Icons.notifications_active_rounded,
+              label: '알림 설정',
+              selected: false,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationSettingsPage(),
+                  ),
+                );
+              },
+            ),
             if (canApproveNurses)
               sideMenuButton(
                 icon: Icons.groups_rounded,
@@ -1730,6 +1746,10 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  /// 15개 열이 눌리지 않고 다 들어가는 최소 폭.
+  /// 이보다 창이 좁으면 열을 줄이는 대신 가로 스크롤로 넘긴다.
+  static const double dashboardTableMinWidth = 1560;
+
   Widget dashboardTable(List<Map<String, dynamic>> summaries) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1755,12 +1775,13 @@ class _StationPageState extends State<StationPage> {
               child: SingleChildScrollView(
                 controller: tableController,
                 scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: constraints.maxWidth,
-                  ),
+                // 표에 '유한한' 폭을 준다. 가로 스크롤 안에서는 폭이 무한대라
+                // DataTable이 열 너비를 제대로 배분하지 못해 셀 내용이 넘친다(빗금).
+                // 창이 좁으면 눌러 담는 대신 가로 스크롤이 생기도록 최소 폭을 보장한다.
+                child: SizedBox(
+                  width: math.max(constraints.maxWidth, dashboardTableMinWidth),
                   child: DataTable(
-                    columnSpacing: 26,
+                    columnSpacing: 18,
                     horizontalMargin: 22,
                     headingRowColor: WidgetStateProperty.all(
                       const Color(0xFFF1F5F9),
@@ -1777,7 +1798,7 @@ class _StationPageState extends State<StationPage> {
                     ),
                     headingRowHeight: 60,
                     dataRowMinHeight: 74,
-                    dataRowMaxHeight: 92,
+                    dataRowMaxHeight: 110,
                     columns: const [
                       DataColumn(label: Text('병실')),
                       DataColumn(label: Text('환자(나이)')),
@@ -1900,8 +1921,13 @@ class _StationPageState extends State<StationPage> {
                                 : null,
                           )),
                           DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                            // 칩 라벨 길이가 상태에 따라 바뀌므로(부종 / 부종 +4,
+                            // 배변타입 / BSS 7) Row로 두면 좁을 때 넘친다.
+                            // Wrap이면 다음 줄로 흘러 빗금이 생기지 않는다.
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 assessmentChip(
                                   label: edemaLabel(edema),
@@ -1917,7 +1943,6 @@ class _StationPageState extends State<StationPage> {
                                         saveAssessment(patientId, edemaGrade: v),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 assessmentChip(
                                   label: stoolLabel(stool),
                                   isSet: stool > 0,
@@ -1932,7 +1957,6 @@ class _StationPageState extends State<StationPage> {
                                         saveAssessment(patientId, stoolType: v),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 detailButton(
                                   onTap: () => showPatientDetailDialog(
                                     patientId: patientId,

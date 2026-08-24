@@ -1,9 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
+import 'utils/push_messaging.dart';
 import 'pages/login_page.dart';
 import 'pages/station_page.dart';
 import 'pages/nurse_home_page.dart';
@@ -97,6 +101,16 @@ class AuthGate extends StatelessWidget {
 
     final data = userDoc.data()!;
     final role = (data['role'] ?? '').toString().trim();
+
+    // 이미 알림을 허용한 기기면 토큰만 조용히 갱신한다(권한 팝업 없음).
+    // 최초 허용은 알림 설정 화면의 버튼에서 받는다 — 브라우저가 사용자 조작을 요구한다.
+    unawaited(
+      PushMessaging.refreshQuietly(email).catchError((Object e) {
+        debugPrint('FCM 토큰 갱신 건너뜀: $e');
+        return null;
+      }),
+    );
+    PushMessaging.listenTokenRefresh(email);
 
     // 좁은 화면(폰/홈화면 PWA)은 간호사 입력 앱, 넓은 화면(데스크톱)은 대시보드로.
     if (role == 'nurse') {
