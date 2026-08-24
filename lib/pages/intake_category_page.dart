@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'intake_record_page.dart';
 
 /// 환자를 선택하고 "식사량"을 고른 뒤, 섭취 경로별로 4분류를 선택하는 화면.
-///  경구식(직접섭취) / 관급식(수액) / 수분섭취(음료 포함) / 기타섭취(과일)
+///  경구식(구강섭취·관급식) / 비경구식(수액) / 수분섭취(음료 포함) / 기타섭취(과일)
 /// 각 분류는 IntakeRecordPage 를 해당 section 하나만 보여주는 모드로 연다.
 /// (한 화면에 다 쌓지 않아 스크롤이 크게 줄어든다.)
 class IntakeCategoryPage extends StatelessWidget {
@@ -180,7 +180,7 @@ class IntakeCategoryPage extends StatelessWidget {
                           children: [
                             choiceCard(
                               label: '경구식',
-                              subtitle: '직접섭취',
+                              subtitle: '구강섭취 · 관급식',
                               icon: Icons.restaurant_rounded,
                               color: mintDark,
                               background: mintSoft,
@@ -189,8 +189,8 @@ class IntakeCategoryPage extends StatelessWidget {
                             ),
                             const SizedBox(width: 16),
                             choiceCard(
-                              label: '수액',
-                              subtitle: '정맥 주입(IV)',
+                              label: '비경구식',
+                              subtitle: '수액(IV)',
                               icon: Icons.vaccines_rounded,
                               color: const Color(0xFF7C3AED),
                               background: const Color(0xFFF3E8FF),
