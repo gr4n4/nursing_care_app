@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 /// enableOnThisDevice() 결과. 권한 거부와 토큰 발급 실패(타임아웃 등)는
 /// 사용자에게 다른 안내를 보여줘야 해서 하나의 bool로 뭉치지 않는다.
@@ -162,16 +163,105 @@ class PushMessaging {
     }
   }
 
+  /// 앱이 화면에 떠 있을 때(foreground) 도착하는 메시지를 화면 안 배너로 보여준다.
+  ///
+  /// FCM 웹은 탭이 백그라운드일 때만 서비스워커가 시스템 알림을 띄운다.
+  /// 탭이 포커스된 상태로 오는 메시지는 onMessage 로 들어오고, 여기서 받지 않으면
+  /// 아무 데도 표시되지 않고 그대로 사라진다(간호사가 알림을 놓치게 된다).
+  static bool _foregroundListenerAttached = false;
+
+  static void listenForegroundMessages(GlobalKey<NavigatorState> navigatorKey) {
+    // AuthGate의 FutureBuilder는 재빌드 때마다 이 함수를 다시 부를 수 있다.
+    // 그때마다 구독을 추가하면 배너가 여러 번 겹쳐 뜬다.
+    if (_foregroundListenerAttached) return;
+    _foregroundListenerAttached = true;
+
+    FirebaseMessaging.onMessage.listen((message) {
+      final data = message.data;
+      final title = (data['title'] ?? message.notification?.title ?? 'Care Note')
+          .toString();
+      final body = (data['body'] ?? message.notification?.body ?? '').toString();
+
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.notifications_active_rounded,
+                color: Color(0xFF7CCFC6),
+                size: 22,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (body.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        body,
+                        style: const TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  static bool _tokenRefreshListenerAttached = false;
+
   /// 토큰이 갱신되면(브라우저가 주기적으로 교체) 새 토큰을 다시 저장한다.
   /// 옛 토큰 문서는 스케줄러가 발송 실패 시 정리한다.
   static void listenTokenRefresh(String email) {
+    // foreground 리스너와 같은 이유로 중복 구독을 막는다.
+    if (_tokenRefreshListenerAttached) return;
+    _tokenRefreshListenerAttached = true;
+
     FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
-      await _tokens.doc(token).set({
-        'email': email,
-        'token': token,
-        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
+      try {
+        await _tokens.doc(token).set({
+          'email': email,
+          'token': token,
+          'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+          'updatedAt': Timestamp.now(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        // 백그라운드 갱신이라 실패해도 화면을 막을 수 없다. 다음 로그인 때 다시 저장된다.
+        debugPrint('토큰 갱신 저장 실패: $e');
+      }
     });
   }
 }

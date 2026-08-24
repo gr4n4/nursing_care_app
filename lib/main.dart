@@ -25,10 +25,16 @@ void main() async {
 class CareNoteApp extends StatelessWidget {
   const CareNoteApp({super.key});
 
+  /// 앱이 화면에 떠 있을 때 도착하는 푸시를 배너로 띄우려면
+  /// 위젯 트리 밖에서도 쓸 수 있는 context가 필요하다.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Care Note',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -111,6 +117,9 @@ class AuthGate extends StatelessWidget {
       }),
     );
     PushMessaging.listenTokenRefresh(email);
+    // 탭이 포커스된 상태로 오는 푸시는 서비스워커가 아니라 앱으로 들어온다.
+    // 받아서 배너로 띄우지 않으면 아무 데도 안 보이고 사라진다.
+    PushMessaging.listenForegroundMessages(CareNoteApp.navigatorKey);
 
     // 좁은 화면(폰/홈화면 PWA)은 간호사 입력 앱, 넓은 화면(데스크톱)은 대시보드로.
     if (role == 'nurse') {
