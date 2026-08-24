@@ -185,6 +185,11 @@ async function main() {
         tag: `meal_${pid}_${meal.key}`,
         title: '식사 기록 누락',
         body: `${who}의 ${meal.label} 식사 기록이 입력되지 않았습니다. 확인하여 기입해주세요.`,
+        kind: 'meal',
+        patientId: pid,
+        patientName: name,
+        room,
+        dateKey,
       });
     }
 
@@ -202,6 +207,11 @@ async function main() {
         tag: `output_${pid}`,
         title: '배설 기록 확인',
         body: `${who}의 배설 기록이 ${hours}시간째 없습니다. 확인해주세요.`,
+        kind: 'output',
+        patientId: pid,
+        patientName: name,
+        room,
+        dateKey,
       });
     }
   }
@@ -282,6 +292,13 @@ async function main() {
       sentAt: admin.firestore.Timestamp.now(),
       title: item.title,
       body: item.body,
+      kind: item.kind,
+      patientId: item.patientId,
+      patientName: item.patientName,
+      room: item.room,
+      date: item.dateKey,
+      successCount: res.successCount,
+      failureCount: res.failureCount,
     });
   }
 

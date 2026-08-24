@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/feedback.dart';
 import '../utils/push_messaging.dart';
+import 'notification_log_page.dart';
 
 /// 기록 누락 푸시 알림의 규칙을 정하는 화면.
 ///
@@ -200,6 +201,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     final picked = await showTimePicker(
       context: context,
       initialTime: current,
+      // 아날로그 시계판 대신 숫자 입력으로 시작한다. 병동에서는 "20:00"처럼
+      // 정확한 시각을 바로 찍는 일이 많아 다이얼을 돌리는 게 더 번거롭다.
+      initialEntryMode: TimePickerEntryMode.input,
+      helpText: '시각 입력',
+      hourLabelText: '시',
+      minuteLabelText: '분',
       builder: (context, child) => MediaQuery(
         // 24시간 표기로 고정 — 병동에서 쓰는 표기와 맞춘다.
         data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
@@ -577,6 +584,32 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     );
   }
 
+  /// 알림 기록 화면으로 가는 카드.
+  /// 폰 알림창에 여러 건이 뭉쳐 오면 무슨 알림인지 알 수 없어서 여기서 확인한다.
+  Widget logLinkCard() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const NotificationLogPage()),
+      ),
+      child: sectionCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: sectionTitle(
+                '알림 기록',
+                '어떤 알림이 언제 갔는지 확인합니다.',
+                Icons.history_rounded,
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: textGrey, size: 26),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget masterCard() {
     return sectionCard(
       child: Row(
@@ -744,6 +777,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                                 children: [
                                   deviceCard(),
                                   if (loadErrorText != null) loadWarningCard(),
+                                  logLinkCard(),
                                   masterCard(),
                                   mealCard(),
                                   outputCard(),

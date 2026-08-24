@@ -422,6 +422,31 @@ class _NurseHomePageState extends State<NurseHomePage> {
     );
   }
 
+  /// 어절 경계에서만 줄바꿈되는 제목.
+  ///
+  /// 한글은 기본 줄바꿈이 음절 단위라 폭이 좁아지면 '신관4병동 간 / 호사님'처럼
+  /// 낱말 한가운데가 잘린다. 어절을 각각 Text로 만들어 Wrap에 넣으면
+  /// 줄바꿈이 낱말 사이에서만 일어난다.
+  Widget wordWrapTitle(String text) {
+    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 2,
+      children: [
+        for (final word in words)
+          Text(
+            word,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget pageHeader(String nurseName) {
     final displayName = nurseName.isEmpty ? '간호사' : nurseName;
 
@@ -455,14 +480,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  manageMode ? '환자 관리' : '$displayName 간호사님',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                wordWrapTitle(manageMode ? '환자 관리' : '$displayName 간호사님'),
               ],
             ),
           ),

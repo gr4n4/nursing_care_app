@@ -75,6 +75,14 @@ service cloud.firestore {
       allow write: if signedIn();
     }
 
+    // 알림 발송 기록. 앱에서는 "무슨 알림이 언제 갔는지" 확인만 하면 되므로
+    // 읽기만 열고 쓰기는 막는다. 기록을 남기는 스케줄러는 서비스 계정이라
+    // 이 규칙을 거치지 않으므로 쓰기를 열어줄 필요가 없다.
+    match /notification_log/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // 위에 명시하지 않은 경로는 전부 차단한다.
     match /{document=**} {
       allow read, write: if false;
