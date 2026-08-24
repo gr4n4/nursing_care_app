@@ -73,6 +73,55 @@ function isNight(nowMinutes, startMinutes, endMinutes) {
   return nowMinutes >= startMinutes || nowMinutes < endMinutes;
 }
 
+// ---------- 테스트 발송 ----------
+
+/**
+ * 등록된 모든 기기로 확인용 알림을 한 건 보낸다.
+ * 실제 누락 검사와 무관하며 notification_log 에도 남기지 않는다
+ * (테스트가 실제 알림의 중복 방지 기록을 건드리면 안 된다).
+ */
+async function sendTestNotification(db) {
+  const tokensSnap = await db.collection('push_tokens').get();
+  const tokens = tokensSnap.docs.map((d) => d.id);
+
+  if (tokens.length === 0) {
+    console.log('등록된 기기가 없습니다. 앱의 알림 설정에서 먼저 기기를 등록하세요.');
+    return;
+  }
+
+  console.log(`테스트 발송 대상 기기 ${tokens.length}대:`);
+  tokensSnap.docs.forEach((d) => {
+    const data = d.data();
+    console.log(`  - ${data.platform || '?'} / ${data.email || '?'}`);
+  });
+
+  const kst = nowKst();
+  const hhmm = `${String(kst.getUTCHours()).padStart(2, '0')}:${String(
+    kst.getUTCMinutes()
+  ).padStart(2, '0')}`;
+
+  const res = await admin.messaging().sendEachForMulticast({
+    tokens,
+    data: {
+      title: 'Care Note 테스트 알림',
+      body: `알림이 정상적으로 도착했습니다. (발송 ${hhmm})`,
+      // 테스트는 매번 새로 보이게 tag를 고정하지 않는다.
+      tag: `test_${Date.now()}`,
+      url: '/',
+    },
+    webpush: { headers: { Urgency: 'high', TTL: '3600' } },
+  });
+
+  console.log(`성공 ${res.successCount} / 실패 ${res.failureCount}`);
+  res.responses.forEach((r, i) => {
+    if (!r.success) {
+      console.error(
+        `  실패: ${tokens[i].slice(0, 20)}… (${r.error && r.error.code})`
+      );
+    }
+  });
+}
+
 // ---------- 메인 ----------
 
 async function main() {
@@ -87,6 +136,13 @@ async function main() {
   });
 
   const db = admin.firestore();
+
+  // 테스트 모드: 누락 검사도 중복 방지도 건너뛰고, 등록된 모든 기기로 즉시 한 건 보낸다.
+  // 새 기기(폰·PC)를 등록한 뒤 "실제로 알림이 오는지" 확인할 때 쓴다.
+  if (process.env.TEST_MODE === 'true') {
+    await sendTestNotification(db);
+    return;
+  }
 
   const settingsSnap = await db.doc('settings/notifications').get();
   const settings = settingsSnap.exists ? settingsSnap.data() : {};

@@ -9,8 +9,13 @@ name: 기록 누락 알림
 on:
   schedule:
     - cron: '*/15 * * * *'
-  # 테스트용 수동 실행. Actions 탭에서 'Run workflow' 버튼으로 즉시 돌릴 수 있다.
+  # 수동 실행. Actions 탭에서 'Run workflow' 버튼으로 즉시 돌릴 수 있다.
   workflow_dispatch:
+    inputs:
+      test_mode:
+        description: '테스트 알림 보내기 (누락 검사 없이 등록된 모든 기기로 즉시 1건 발송)'
+        type: boolean
+        default: false
 
 jobs:
   notify:
@@ -30,4 +35,5 @@ jobs:
         working-directory: scripts
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TEST_MODE: ${{ inputs.test_mode }}
         run: node notify.js
