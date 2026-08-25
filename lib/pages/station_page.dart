@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../data/food_table.dart';
 import '../utils/care_date.dart';
 import '../utils/feedback.dart';
+import '../utils/record_export.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
 import 'notification_settings_page.dart';
@@ -35,6 +36,179 @@ class _StationPageState extends State<StationPage> {
   String get firestoreDateString => careDateKey(DateTime.now());
 
   String get weekdayString => careWeekday(DateTime.now());
+
+  /// 엑셀 내보내는 중. 파일이 커지면 몇 초 걸려서 버튼을 잠그고 표시한다.
+  bool exporting = false;
+
+  /// 내보낼 날짜를 고르고 엑셀(여러 날이면 zip)로 저장한다.
+  ///
+  /// 기본은 오늘 하루치. 미기록분을 나중에 채우는 일이 있어 다른 날도 고를 수 있고,
+  /// 여러 날을 고르면 날짜별 파일 하나씩을 zip으로 묶는다.
+  Future<void> showExportDialog() async {
+    final today = DateTime.now();
+    var start = today;
+    var end = today;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Future<void> pick(bool isStart) async {
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: isStart ? start : end,
+                firstDate: DateTime(2025, 1, 1),
+                lastDate: today,
+                helpText: isStart ? '시작 날짜' : '종료 날짜',
+              );
+              if (picked == null) return;
+              setLocal(() {
+                if (isStart) {
+                  start = picked;
+                  // 시작이 종료보다 뒤면 종료를 끌어올려 범위가 뒤집히지 않게 한다.
+                  if (start.isAfter(end)) end = start;
+                } else {
+                  end = picked;
+                  if (end.isBefore(start)) start = end;
+                }
+              });
+            }
+
+            final days = _dateRange(start, end);
+
+            Widget dateButton(String label, DateTime value, bool isStart) {
+              return Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => pick(isStart),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          careDateDisplay(value),
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return AlertDialog(
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('엑셀 내보내기'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '대시보드에 보이는 환자 전체를 내보냅니다.\n'
+                      '시트1 = 기록지 양식(합계), 시트2 = 상세 내역.',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        dateButton('시작', start, true),
+                        const SizedBox(width: 10),
+                        dateButton('종료', end, false),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE6FAF8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        days.length == 1
+                            ? '엑셀 파일 1개를 내려받습니다.'
+                            : '${days.length}일치 → 파일 ${days.length}개를 zip으로 묶어 내려받습니다.',
+                        style: const TextStyle(
+                          color: Color(0xFF0F766E),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('취소'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('내려받기'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => exporting = true);
+    try {
+      await RecordExport.exportDates(_dateRange(start, end));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('내보내기 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  /// 시작~종료 사이의 날짜를 하루 단위로 편다.
+  List<DateTime> _dateRange(DateTime start, DateTime end) {
+    final a = DateTime(start.year, start.month, start.day);
+    final b = DateTime(end.year, end.month, end.day);
+    final out = <DateTime>[];
+    for (var d = a; !d.isAfter(b); d = d.add(const Duration(days: 1))) {
+      out.add(d);
+    }
+    return out;
+  }
 
   void refreshDashboard() {
     setState(() {
@@ -71,6 +245,38 @@ class _StationPageState extends State<StationPage> {
 
   // 섹션 제목 Row는 Expanded가 있어 자식이 무한 너비로 '측정'된다.
   // ElevatedButton은 무한 너비를 못 버티므로 GestureDetector+Container(Row min)로 만든다.
+  Widget exportButton() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: exporting ? null : showExportDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: exporting ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              exporting ? Icons.hourglass_top_rounded : Icons.download_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              exporting ? '내보내는 중…' : '엑셀 내보내기',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget managePatientsButton() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -975,15 +1181,76 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  /// 병실 + 환자명을 한 칸에. 두 칸으로 나눠도 이동 경로가 같아 나눌 이유가 없다.
+  Widget patientCell({
+    required String room,
+    required String displayName,
+    required bool active,
+  }) {
+    final roomText = room.trim().isEmpty ? '-' : '${room.trim()}호';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFFE6FAF8) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: active ? const Color(0xFFC7EEE9) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Text(
+            roomText,
+            style: TextStyle(
+              color: active
+                  ? const Color(0xFF0F766E)
+                  : const Color(0xFF94A3B8),
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            displayName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              height: 1.35,
+              color: active
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFF94A3B8),
+            ),
+          ),
+        ),
+        if (!active) ...[
+          const SizedBox(width: 8),
+          const Text(
+            '숨김',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   /// 섭취 / 배설 / 판정 덩어리를 눈으로 가르는 세로선.
   /// 기록지 양식이 굵은 선으로 섭취량·배설량을 나눠 놓은 것을 그대로 옮겼다.
   /// DataTable은 헤더 병합을 지원하지 않아 얇은 열을 끼워 넣는 방식으로 흉내낸다.
   Widget groupDividerHead() {
-    return Container(width: 1, height: 34, color: const Color(0xFFCBD5E1));
+    return Container(width: 2, height: 40, color: const Color(0xFF64748B));
   }
 
   Widget groupDividerCell() {
-    return Container(width: 1, height: 46, color: const Color(0xFFE2E8F0));
+    return Container(width: 2, height: 60, color: const Color(0xFF94A3B8));
   }
 
   /// 기록지 양식 칸의 숫자.
@@ -1602,8 +1869,7 @@ class _StationPageState extends State<StationPage> {
                     // 메디로에 옮겨 적을 때 눈이 왔다갔다 하지 않게 하기 위함.
                     // (수액은 양식에 없는 칸이라 섭취 끝에 따로 둔다.)
                     columns: [
-                      const DataColumn(label: Text('병실')),
-                      const DataColumn(label: Text('환자(나이)')),
+                      const DataColumn(label: Text('병실 · 환자')),
                       // ── 섭취량 ──
                       const DataColumn(label: Text('튜브')),
                       const DataColumn(label: Text('구강')),
@@ -1649,42 +1915,12 @@ class _StationPageState extends State<StationPage> {
                           return null;
                         }),
                         cells: [
+                          // 병실과 이름은 어차피 같은 곳으로 이동하므로 한 칸으로 합친다.
                           DataCell(
-                            Text(item['room'].toString().isEmpty
-                                ? '-'
-                                : '${item['room']}호'),
-                            onTap: () => openPatientDayPage(
-                              patientId: patientId,
-                              name: patientName,
+                            patientCell(
                               room: item['room'].toString(),
-                              age: age,
-                            ),
-                          ),
-                          DataCell(
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  displayName,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.35,
-                                    color: active
-                                        ? const Color(0xFF0F172A)
-                                        : const Color(0xFF94A3B8),
-                                  ),
-                                ),
-                                if (!active)
-                                  const Text(
-                                    '숨김',
-                                    style: TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                              ],
+                              displayName: displayName,
+                              active: active,
                             ),
                             onTap: () => openPatientDayPage(
                               patientId: patientId,
@@ -1906,6 +2142,8 @@ class _StationPageState extends State<StationPage> {
                               ),
                             ),
                           ),
+                          exportButton(),
+                          const SizedBox(width: 10),
                           managePatientsButton(),
                           const SizedBox(width: 16),
                           legend(),
