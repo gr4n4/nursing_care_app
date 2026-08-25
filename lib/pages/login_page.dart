@@ -216,21 +216,28 @@ class _LoginPageState extends State<LoginPage> {
 
   /// 로그인 화면 로고.
   ///
-  /// 정식 로고 파일(assets/icon/balancare_logo.png)이 들어오면 아래 Image로 교체한다.
-  /// 그 전까지는 같은 자리·같은 크기의 임시 표식을 쓴다.
-  ///   child: Image.asset('assets/icon/balancare_logo.png', width: 72, height: 72),
+  /// 앱 아이콘과 같은 그림을 쓴다. 홈화면 아이콘을 눌러 들어온 사람이
+  /// 같은 그림을 다시 만나야 "제대로 들어왔다"고 느낀다.
+  /// 그림 자체에 배경과 둥근 모서리가 들어 있어 별도 장식을 얹지 않는다.
   Widget logoMark() {
-    return Container(
-      width: 72,
-      height: 72,
-      decoration: BoxDecoration(
-        color: const Color(0xFFDCE7F5),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: const Icon(
-        Icons.monitor_weight_rounded,
-        size: 38,
-        color: Color(0xFF16305E),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Image.asset(
+        'assets/icon/app_icon.png',
+        width: 88,
+        height: 88,
+        fit: BoxFit.cover,
+        // 그림을 못 읽어도 로그인은 되어야 하므로 대체 표식을 둔다.
+        errorBuilder: (_, _, _) => Container(
+          width: 88,
+          height: 88,
+          color: const Color(0xFFDCE7F5),
+          child: const Icon(
+            Icons.monitor_weight_rounded,
+            size: 42,
+            color: Color(0xFF16305E),
+          ),
+        ),
       ),
     );
   }

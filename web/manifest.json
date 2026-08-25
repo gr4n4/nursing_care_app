@@ -3,7 +3,7 @@
     "short_name": "Balancare",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F4F6FB",
+    "background_color": "#DCE7F5",
     "theme_color": "#16305E",
     "description": "식사 · 수분 · 배설 통합 관리",
     "orientation": "portrait-primary",
