@@ -10,6 +10,7 @@ import '../utils/feedback.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
 import 'notification_settings_page.dart';
+import 'patient_day_page.dart';
 import 'nurse_home_page.dart';
 import 'nurse_profile_edit_page.dart';
 import 'patient_list_page.dart';
@@ -974,6 +975,17 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  /// 섭취 / 배설 / 판정 덩어리를 눈으로 가르는 세로선.
+  /// 기록지 양식이 굵은 선으로 섭취량·배설량을 나눠 놓은 것을 그대로 옮겼다.
+  /// DataTable은 헤더 병합을 지원하지 않아 얇은 열을 끼워 넣는 방식으로 흉내낸다.
+  Widget groupDividerHead() {
+    return Container(width: 1, height: 34, color: const Color(0xFFCBD5E1));
+  }
+
+  Widget groupDividerCell() {
+    return Container(width: 1, height: 46, color: const Color(0xFFE2E8F0));
+  }
+
   /// 기록지 양식 칸의 숫자.
   /// 0은 흐리게 '-'로 보여준다. 0이 잔뜩 찍혀 있으면 실제로 기록된 값이 묻혀서
   /// 메디로에 옮겨 적을 때 눈으로 훑기가 어렵다.
@@ -1501,478 +1513,41 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
-  // ── 환자 클릭 → 오늘 상세 기록 (뭘 먹고/마시고/배설했는지) ──
-  String _mealLabelKo(String t) {
-    if (t == 'breakfast') return '아침';
-    if (t == 'lunch') return '점심';
-    if (t == 'dinner') return '저녁';
-    return t;
-  }
 
-  String _catLabelKo(String c) {
-    switch (c) {
-      case 'drink':
-        return '음료';
-      case 'fruit':
-        return '과일';
-      case 'tube':
-        return '관급식';
-      case 'iv':
-        return '수액';
-      default:
-        return c;
-    }
-  }
 
-  // 식사 문서 → "밥(쌀밥) 전체, 국 ½, 계란찜 전체" 형태의 항목 요약
-  String _mealItemsText(Map<String, dynamic> m) {
-    final parts = <String>[];
 
-    void addItem(String type, dynamic ratio) {
-      final t = type.trim();
-      if (t.isEmpty || t == '없음' || t == '-') return;
-      final r = (ratio ?? '').toString().trim();
-      parts.add(r.isEmpty ? t : '$t $r');
-    }
 
-    addItem((m['stapleType'] ?? '주식').toString(), m['stapleRatio']);
 
-    final soupRatio = (m['soupRatio'] ?? '').toString().trim();
-    if (soupRatio.isNotEmpty &&
-        soupRatio != '없음' &&
-        toInt(m['soupServingGram']) > 0) {
-      parts.add('국 $soupRatio');
-    }
 
-    for (var i = 1; i <= 4; i++) {
-      addItem((m['side${i}Type'] ?? '').toString(), m['side${i}Ratio']);
-    }
 
-    return parts.isEmpty ? '기록됨' : parts.join(', ');
-  }
-
-  String _outputText(Map<String, dynamic> o) {
-    final amount = toInt(o['urineAmount']);
-    final unit = (o['urineUnit'] ?? 'ml').toString();
-    final parts = <String>[];
-    if (amount > 0) parts.add('$amount$unit');
-    if (o['stoolYn'] == true) {
-      final sg = toInt(o['stoolAmount']);
-      parts.add('배변${sg > 0 ? ' ${sg}g' : ''}');
-    }
-    return parts.isEmpty ? '기록됨' : parts.join(' · ');
-  }
-
-  Widget _detailSection(
-    String title,
-    IconData icon,
-    Color color,
-    List<Widget> children,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    );
-  }
-
-  Widget _detailLine(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 74,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF475569),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0F172A),
-                height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailEmpty() {
-    return const Text(
-      '아직 기록이 없습니다.',
-      style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
-    );
-  }
-
-  Future<void> showPatientDetailDialog({
+  /// 환자 클릭 → 환자별 하루 기록 페이지.
+  /// 다이얼로그로는 담기 어려운 양이라 정식 화면으로 뺐다.
+  /// 돌아오면 부종·주의해제 등이 바뀌었을 수 있어 목록을 다시 읽는다.
+  Future<void> openPatientDayPage({
     required String patientId,
     required String name,
     required String room,
     required int age,
   }) async {
-    final db = FirebaseFirestore.instance;
-
-    final mealSnap = await db
-        .collection('meal_records')
-        .where('patientId', isEqualTo: patientId)
-        .where('date', isEqualTo: firestoreDateString)
-        .get();
-    final waterSnap = await db
-        .collection('water_records')
-        .where('patientId', isEqualTo: patientId)
-        .where('date', isEqualTo: firestoreDateString)
-        .get();
-    final outputSnap = await db
-        .collection('output_records')
-        .where('patientId', isEqualTo: patientId)
-        .where('date', isEqualTo: firestoreDateString)
-        .get();
-    final assessDoc = await db
-        .collection('daily_assessments')
-        .doc('${patientId}_$firestoreDateString')
-        .get();
-
-    if (!mounted) return;
-
-    const mealOrder = {'breakfast': 0, 'lunch': 1, 'dinner': 2};
-    final meals = mealSnap.docs.map((d) => d.data()).toList()
-      ..sort((a, b) => (mealOrder[a['mealType']] ?? 9)
-          .compareTo(mealOrder[b['mealType']] ?? 9));
-
-    final Map<String, List<Map<String, dynamic>>> waterByCat = {};
-    for (final d in waterSnap.docs) {
-      final data = d.data();
-      final cat = (data['category'] ?? 'drink').toString();
-      waterByCat.putIfAbsent(cat, () => []).add(data);
-    }
-    final hasWater = waterByCat.isNotEmpty;
-
-    final outputs = outputSnap.docs.map((d) => d.data()).toList();
-
-    // "그래서 최종 얼마" — 상세 화면에서 바로 보이도록 여기서 다시 합산한다.
-    // 대시보드 요약과 같은 규칙을 쓴다(식사 수분 + 모든 water_records).
-    int intakeTotalMl = 0;
-    for (final m in meals) {
-      intakeTotalMl += toInt(m['totalFluidMl']);
-    }
-    for (final list in waterByCat.values) {
-      for (final w in list) {
-        intakeTotalMl += toInt(w['amountMl']);
-      }
-    }
-
-    int outputTotalMl = 0;
-    for (final o in outputs) {
-      // 기저귀는 g로 저장되지만 1g≈1ml로 보고 합산한다(대시보드와 동일).
-      outputTotalMl += toInt(o['urineAmount']);
-    }
-
-    final assess = assessDoc.data();
-    final edema = toInt(assess?['edemaGrade']);
-    final stool = toInt(assess?['stoolType']);
-    final edemaDesc =
-        (edema >= 0 && edema < edemaScale.length) ? edemaScale[edema][2] : '';
-    final stoolDesc =
-        (stool >= 0 && stool < stoolScale.length) ? stoolScale[stool][2] : '';
-
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
-          title: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE6FAF8),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  room.isEmpty ? '-' : room,
-                  style: const TextStyle(
-                    color: Color(0xFF0F766E),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      age > 0 ? '$name ($age세)' : name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 19,
-                      ),
-                    ),
-                    Text(
-                      '$todayString ($weekdayString) 기록',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _detailSection(
-                    '식사',
-                    Icons.restaurant_rounded,
-                    const Color(0xFFF59E0B),
-                    [
-                      if (meals.isEmpty) _detailEmpty(),
-                      for (final m in meals)
-                        _detailLine(
-                          _mealLabelKo(m['mealType'].toString()),
-                          '${_mealItemsText(m)}  ·  ${toInt(m['totalFoodGram'])}g / 수분 ${toInt(m['totalFluidMl'])}ml',
-                        ),
-                    ],
-                  ),
-                  _detailSection(
-                    '수분·음료·관급식·수액',
-                    Icons.local_drink_rounded,
-                    const Color(0xFF2563EB),
-                    [
-                      if (!hasWater) _detailEmpty(),
-                      for (final cat in const ['drink', 'fruit', 'tube', 'iv'])
-                        if (waterByCat[cat] != null)
-                          for (final w in waterByCat[cat]!)
-                            _detailLine(
-                              _catLabelKo(cat),
-                              '${w['name']}  ${toInt(w['amountMl'])}ml',
-                            ),
-                    ],
-                  ),
-                  _detailSection(
-                    '배설',
-                    Icons.water_drop_rounded,
-                    const Color(0xFF0EA5E9),
-                    [
-                      if (outputs.isEmpty) _detailEmpty(),
-                      for (final o in outputs)
-                        _detailLine(
-                          (o['urineTypeLabel'] ??
-                                  o['urineMethodLabel'] ??
-                                  '배뇨')
-                              .toString(),
-                          _outputText(o),
-                        ),
-                    ],
-                  ),
-                  _detailSection(
-                    '특이사항',
-                    Icons.assignment_rounded,
-                    const Color(0xFF7C3AED),
-                    [
-                      _detailLine('부종',
-                          edema > 0 ? '+$edema · $edemaDesc' : '미기록'),
-                      _detailLine('배변타입',
-                          stool > 0 ? 'BSS $stool · $stoolDesc' : '미기록'),
-                      const SizedBox(height: 8),
-                      // 대시보드 특이사항 열을 없애면서 입력 경로를 여기로 옮겼다.
-                      // 값을 바꾸면 다이얼로그를 닫고 목록을 새로 읽어 반영한다.
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          assessmentChip(
-                            label: edemaLabel(edema),
-                            isSet: edema > 0,
-                            color: const Color(0xFF7C3AED),
-                            onTap: () async {
-                              Navigator.pop(ctx);
-                              await showScaleDialog(
-                                title: '부종 (Edema)',
-                                patientName: name,
-                                scale: edemaScale,
-                                current: edema,
-                                color: const Color(0xFF7C3AED),
-                                onSelect: (v) =>
-                                    saveAssessment(patientId, edemaGrade: v),
-                              );
-                            },
-                          ),
-                          assessmentChip(
-                            label: stoolLabel(stool),
-                            isSet: stool > 0,
-                            color: const Color(0xFF0F766E),
-                            onTap: () async {
-                              Navigator.pop(ctx);
-                              await showScaleDialog(
-                                title: '배변 타입 (BSS)',
-                                patientName: name,
-                                scale: stoolScale,
-                                current: stool,
-                                color: const Color(0xFF0F766E),
-                                onSelect: (v) =>
-                                    saveAssessment(patientId, stoolType: v),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _detailBalanceSummary(
-                    intakeMl: intakeTotalMl,
-                    outputMl: outputTotalMl,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('닫기'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// 상세 화면 맨 아래의 "섭취 − 배설 = 밸런스" 요약.
-  /// 간호사가 상세를 여는 이유가 결국 이 숫자라서 가장 크게 보여준다.
-  Widget _detailBalanceSummary({
-    required int intakeMl,
-    required int outputMl,
-  }) {
-    final balance = intakeMl - outputMl;
-    final over = balance.abs() > ioBalanceThresholdMl;
-    final sign = balance > 0 ? '+' : '';
-
-    Widget block(String label, String value, Color color) {
-      return Expanded(
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF64748B),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: over ? const Color(0xFFFEF2F2) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: over ? const Color(0xFFFECACA) : const Color(0xFFE2E8F0),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PatientDayPage(
+          patientId: patientId,
+          name: name,
+          room: room,
+          age: age,
         ),
       ),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              block('섭취', '$intakeMl', const Color(0xFF0F766E)),
-              const Text('−',
-                  style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900)),
-              block('배설', '$outputMl', const Color(0xFF2563EB)),
-              const Text('=',
-                  style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900)),
-              block(
-                '밸런스',
-                '$sign$balance',
-                over ? const Color(0xFFEF4444) : const Color(0xFF0F172A),
-              ),
-            ],
-          ),
-          if (over) ...[
-            const SizedBox(height: 10),
-            Text(
-              '±$ioBalanceThresholdMl ml를 넘었습니다. 확인이 필요합니다.',
-              style: const TextStyle(
-                color: Color(0xFFEF4444),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ],
-      ),
     );
+    if (mounted) refreshDashboard();
   }
 
-  /// 14개 열이 눌리지 않고 다 들어가는 최소 폭.
+
+
+  /// 열이 눌리지 않고 다 들어가는 최소 폭(구분선 2개 + 특이사항 포함 17열).
   /// 이보다 창이 좁으면 열을 줄이는 대신 가로 스크롤로 넘긴다.
-  static const double dashboardTableMinWidth = 1560;
+  static const double dashboardTableMinWidth = 1820;
 
   Widget dashboardTable(List<Map<String, dynamic>> summaries) {
     return LayoutBuilder(
@@ -2026,21 +1601,28 @@ class _StationPageState extends State<StationPage> {
                     // 간호과 '섭취·배설 기록지' 양식의 칸 순서를 그대로 따른다.
                     // 메디로에 옮겨 적을 때 눈이 왔다갔다 하지 않게 하기 위함.
                     // (수액은 양식에 없는 칸이라 섭취 끝에 따로 둔다.)
-                    columns: const [
-                      DataColumn(label: Text('병실')),
-                      DataColumn(label: Text('환자(나이)')),
-                      DataColumn(label: Text('튜브')),
-                      DataColumn(label: Text('구강')),
-                      DataColumn(label: Text('수액')),
-                      DataColumn(label: Text('섭취 총량')),
-                      DataColumn(label: Text('자연배뇨')),
-                      DataColumn(label: Text('카테타')),
-                      DataColumn(label: Text('실금')),
-                      DataColumn(label: Text('기저귀(g)')),
-                      DataColumn(label: Text('배설 총량')),
-                      DataColumn(label: Text('배변')),
-                      DataColumn(label: Text('밸런스(ml)')),
-                      DataColumn(label: Text('상태')),
+                    columns: [
+                      const DataColumn(label: Text('병실')),
+                      const DataColumn(label: Text('환자(나이)')),
+                      // ── 섭취량 ──
+                      const DataColumn(label: Text('튜브')),
+                      const DataColumn(label: Text('구강')),
+                      const DataColumn(label: Text('수액')),
+                      const DataColumn(label: Text('섭취 총량')),
+                      // 양식처럼 섭취/배설 덩어리를 눈으로 갈라 준다.
+                      DataColumn(label: groupDividerHead()),
+                      // ── 배설량 ──
+                      const DataColumn(label: Text('자연배뇨')),
+                      const DataColumn(label: Text('카테타')),
+                      const DataColumn(label: Text('실금')),
+                      const DataColumn(label: Text('기저귀(g)')),
+                      const DataColumn(label: Text('배설 총량')),
+                      const DataColumn(label: Text('배변')),
+                      DataColumn(label: groupDividerHead()),
+                      // ── 판정 ──
+                      const DataColumn(label: Text('밸런스(ml)')),
+                      const DataColumn(label: Text('상태')),
+                      const DataColumn(label: Text('특이사항')),
                     ],
                     rows: summaries.map((item) {
                       final status = item['status'] as String;
@@ -2048,6 +1630,8 @@ class _StationPageState extends State<StationPage> {
                       final bool active = item['isActive'] == true;
                       final patientId = item['patientId'].toString();
                       final patientName = item['name'].toString();
+                      final edema = toInt(item['edemaGrade']);
+                      final stool = toInt(item['stoolType']);
                       final displayName =
                           age > 0 ? '$patientName\n($age세)' : patientName;
 
@@ -2069,7 +1653,7 @@ class _StationPageState extends State<StationPage> {
                             Text(item['room'].toString().isEmpty
                                 ? '-'
                                 : '${item['room']}호'),
-                            onTap: () => showPatientDetailDialog(
+                            onTap: () => openPatientDayPage(
                               patientId: patientId,
                               name: patientName,
                               room: item['room'].toString(),
@@ -2102,7 +1686,7 @@ class _StationPageState extends State<StationPage> {
                                   ),
                               ],
                             ),
-                            onTap: () => showPatientDetailDialog(
+                            onTap: () => openPatientDayPage(
                               patientId: patientId,
                               name: patientName,
                               room: item['room'].toString(),
@@ -2114,6 +1698,7 @@ class _StationPageState extends State<StationPage> {
                           DataCell(amountCell(toInt(item['oralMl']))),
                           DataCell(amountCell(toInt(item['ivMl']))),
                           DataCell(totalCell(toInt(item['totalFluidInputMl']))),
+                          DataCell(groupDividerCell()),
                           // ── 배설량 ──
                           DataCell(amountCell(toInt(item['naturalMl']))),
                           DataCell(amountCell(toInt(item['catheterMl']))),
@@ -2125,6 +1710,7 @@ class _StationPageState extends State<StationPage> {
                               '${item['stoolCount']}회 / ${item['stoolGram']}g',
                             ),
                           ),
+                          DataCell(groupDividerCell()),
                           DataCell(
                             balanceCell(
                               toInt(item['fluidBalanceMl']),
@@ -2146,8 +1732,47 @@ class _StationPageState extends State<StationPage> {
                                     )
                                 : null,
                           )),
-                          // 부종·배변타입(BSS)과 시간별 기록은 상세 화면으로 옮겼다.
-                          // 대시보드는 메디로에 옮겨 적을 숫자만 남긴다.
+                          // 부종·배변타입 입력은 첫 화면에 둔다. 라운딩 중 바로
+                          // 찍어야 하는 값이라 상세로 들어가게 하면 손이 많이 간다.
+                          DataCell(
+                            // 칩 라벨 길이가 상태에 따라 바뀌므로(부종 / 부종 +4,
+                            // 배변타입 / BSS 7) Row로 두면 좁을 때 넘친다.
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                assessmentChip(
+                                  label: edemaLabel(edema),
+                                  isSet: edema > 0,
+                                  color: const Color(0xFF7C3AED),
+                                  onTap: () => showScaleDialog(
+                                    title: '부종 (Edema)',
+                                    patientName: patientName,
+                                    scale: edemaScale,
+                                    current: edema,
+                                    color: const Color(0xFF7C3AED),
+                                    onSelect: (v) =>
+                                        saveAssessment(patientId, edemaGrade: v),
+                                  ),
+                                ),
+                                assessmentChip(
+                                  label: stoolLabel(stool),
+                                  isSet: stool > 0,
+                                  color: const Color(0xFF0F766E),
+                                  onTap: () => showScaleDialog(
+                                    title: '배변 타입 (BSS)',
+                                    patientName: patientName,
+                                    scale: stoolScale,
+                                    current: stool,
+                                    color: const Color(0xFF0F766E),
+                                    onSelect: (v) =>
+                                        saveAssessment(patientId, stoolType: v),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       );
                     }).toList(),
