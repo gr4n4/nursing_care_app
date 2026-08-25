@@ -1,0 +1,34 @@
+name: 예약 실행 유지
+
+# GitHub는 저장소에 60일간 활동(커밋·푸시)이 없으면 예약(cron) 워크플로를
+# 자동으로 비활성화한다. 앱을 아무리 많이 써도 '저장소 활동'으로는 치지 않는다.
+#
+# 그래서 개발이 끝나고 병동에서 앱만 쓰는 상태가 두 달 이어지면
+# 기록 누락 알림이 아무 예고 없이 멈춘다. 환자 안전과 직결되므로
+# 매달 한 번 저장소를 갱신해 그 카운터를 되돌린다.
+#
+# (이 워크플로 자체가 도는 것만으로는 '활동'이 되지 않는다. 실제 푸시가 필요하다.)
+on:
+  schedule:
+    # 매월 1일 UTC 03:00 = 한국시간 정오. 60일보다 훨씬 짧은 주기라 여유가 있다.
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 타임스탬프 갱신 후 푸시
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/last-keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/last-keepalive
+          # 내용이 같아 커밋할 게 없으면 실패로 처리하지 않고 조용히 끝낸다.
+          git commit -m "chore: 예약 실행 유지용 갱신" || exit 0
+          git push
