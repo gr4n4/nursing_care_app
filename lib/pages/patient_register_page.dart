@@ -190,7 +190,7 @@ class _PatientRegisterPageState extends State<PatientRegisterPage> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'CARE NOTE',
+                'BALANCARE',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,

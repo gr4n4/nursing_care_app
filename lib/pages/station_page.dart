@@ -330,9 +330,20 @@ class _StationPageState extends State<StationPage> {
       int totalSoupMl = 0;
       int totalWaterMl = 0;
 
+      // 간호과 '섭취·배설 기록지' 양식의 칸에 맞춘 집계.
+      // 튜브(관급식) / 구강(식사수분+음료+과일) / 수액(양식엔 없어 별도 칸)
+      int tubeMl = 0;
+      int oralMl = 0;
+      int ivMl = 0;
+
       bool breakfastRecorded = false;
       bool lunchRecorded = false;
       bool dinnerRecorded = false;
+
+      // 배설도 양식대로 종류별로 나눈다.
+      int naturalMl = 0;
+      int catheterMl = 0;
+      int incontinenceMl = 0;
 
       int urineMl = 0;
       int diaperGram = 0;
@@ -355,11 +366,26 @@ class _StationPageState extends State<StationPage> {
         }
       }
 
+      // 식사에 포함된 수분(국·밥 등)은 입으로 들어간 것이므로 구강에 넣는다.
+      oralMl += totalSoupMl;
+
       for (final waterDoc in waterSnapshot.docs) {
         final data = waterDoc.data();
+        if (data['patientId'] != patientId) continue;
 
-        if (data['patientId'] == patientId) {
-          totalWaterMl += toInt(data['amountMl']);
+        final ml = toInt(data['amountMl']);
+        totalWaterMl += ml;
+
+        switch ((data['category'] ?? 'drink').toString()) {
+          case 'tube':
+            tubeMl += ml;
+            break;
+          case 'iv':
+            ivMl += ml;
+            break;
+          // 음료(drink)·과일(fruit)은 모두 입으로 섭취한 것이다.
+          default:
+            oralMl += ml;
         }
       }
 
@@ -373,10 +399,23 @@ class _StationPageState extends State<StationPage> {
         // 기저귀는 무게(g), 그 외 배뇨는 ml — 따로 집계한다.
         final isDiaper =
             data['urineType'] == 'diaper' || (data['urineUnit'] ?? '') == 'g';
+        final amount = toInt(data['urineAmount']);
+
         if (isDiaper) {
-          diaperGram += toInt(data['urineAmount']);
+          diaperGram += amount;
         } else {
-          urineMl += toInt(data['urineAmount']);
+          urineMl += amount;
+          // 기록지 양식의 자연배뇨/카테타/실금 칸을 그대로 채우기 위해 종류별로 나눈다.
+          switch ((data['urineType'] ?? 'natural').toString()) {
+            case 'catheter':
+              catheterMl += amount;
+              break;
+            case 'incontinence':
+              incontinenceMl += amount;
+              break;
+            default:
+              naturalMl += amount;
+          }
         }
 
         if (data['stoolYn'] == true) {
@@ -414,6 +453,15 @@ class _StationPageState extends State<StationPage> {
         'totalSoupMl': totalSoupMl,
         'totalWaterMl': totalWaterMl,
         'totalFluidInputMl': totalFluidInputMl,
+        // 기록지 양식 칸
+        'tubeMl': tubeMl,
+        'oralMl': oralMl,
+        'ivMl': ivMl,
+        'naturalMl': naturalMl,
+        'catheterMl': catheterMl,
+        'incontinenceMl': incontinenceMl,
+        // 배설 총량 = 소변(ml) + 기저귀(g, 1g≈1ml)
+        'outputTotalMl': urineMl + diaperGram,
         'urineMl': urineMl,
         'diaperGram': diaperGram,
         'stoolGram': stoolGram,
@@ -531,7 +579,7 @@ class _StationPageState extends State<StationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'CARE NOTE',
+                    'BALANCARE',
                     style: TextStyle(
                       fontSize: 27,
                       fontWeight: FontWeight.w900,
@@ -923,6 +971,30 @@ class _StationPageState extends State<StationPage> {
           ],
         );
       },
+    );
+  }
+
+  /// 기록지 양식 칸의 숫자.
+  /// 0은 흐리게 '-'로 보여준다. 0이 잔뜩 찍혀 있으면 실제로 기록된 값이 묻혀서
+  /// 메디로에 옮겨 적을 때 눈으로 훑기가 어렵다.
+  Widget amountCell(int value) {
+    if (value <= 0) {
+      return const Text(
+        '-',
+        style: TextStyle(color: Color(0xFFCBD5E1), fontWeight: FontWeight.w700),
+      );
+    }
+    return Text('$value');
+  }
+
+  /// 총량 칸. 옮겨 적을 때 기준이 되는 값이라 진하게 강조한다.
+  Widget totalCell(int value) {
+    return Text(
+      value <= 0 ? '-' : '$value',
+      style: TextStyle(
+        color: value <= 0 ? const Color(0xFFCBD5E1) : const Color(0xFF0F172A),
+        fontWeight: FontWeight.w900,
+      ),
     );
   }
 
@@ -1613,6 +1685,24 @@ class _StationPageState extends State<StationPage> {
 
     final outputs = outputSnap.docs.map((d) => d.data()).toList();
 
+    // "그래서 최종 얼마" — 상세 화면에서 바로 보이도록 여기서 다시 합산한다.
+    // 대시보드 요약과 같은 규칙을 쓴다(식사 수분 + 모든 water_records).
+    int intakeTotalMl = 0;
+    for (final m in meals) {
+      intakeTotalMl += toInt(m['totalFluidMl']);
+    }
+    for (final list in waterByCat.values) {
+      for (final w in list) {
+        intakeTotalMl += toInt(w['amountMl']);
+      }
+    }
+
+    int outputTotalMl = 0;
+    for (final o in outputs) {
+      // 기저귀는 g로 저장되지만 1g≈1ml로 보고 합산한다(대시보드와 동일).
+      outputTotalMl += toInt(o['urineAmount']);
+    }
+
     final assess = assessDoc.data();
     final edema = toInt(assess?['edemaGrade']);
     final stool = toInt(assess?['stoolType']);
@@ -1729,7 +1819,55 @@ class _StationPageState extends State<StationPage> {
                           edema > 0 ? '+$edema · $edemaDesc' : '미기록'),
                       _detailLine('배변타입',
                           stool > 0 ? 'BSS $stool · $stoolDesc' : '미기록'),
+                      const SizedBox(height: 8),
+                      // 대시보드 특이사항 열을 없애면서 입력 경로를 여기로 옮겼다.
+                      // 값을 바꾸면 다이얼로그를 닫고 목록을 새로 읽어 반영한다.
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          assessmentChip(
+                            label: edemaLabel(edema),
+                            isSet: edema > 0,
+                            color: const Color(0xFF7C3AED),
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await showScaleDialog(
+                                title: '부종 (Edema)',
+                                patientName: name,
+                                scale: edemaScale,
+                                current: edema,
+                                color: const Color(0xFF7C3AED),
+                                onSelect: (v) =>
+                                    saveAssessment(patientId, edemaGrade: v),
+                              );
+                            },
+                          ),
+                          assessmentChip(
+                            label: stoolLabel(stool),
+                            isSet: stool > 0,
+                            color: const Color(0xFF0F766E),
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await showScaleDialog(
+                                title: '배변 타입 (BSS)',
+                                patientName: name,
+                                scale: stoolScale,
+                                current: stool,
+                                color: const Color(0xFF0F766E),
+                                onSelect: (v) =>
+                                    saveAssessment(patientId, stoolType: v),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 6),
+                  _detailBalanceSummary(
+                    intakeMl: intakeTotalMl,
+                    outputMl: outputTotalMl,
                   ),
                 ],
               ),
@@ -1746,7 +1884,93 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
-  /// 15개 열이 눌리지 않고 다 들어가는 최소 폭.
+  /// 상세 화면 맨 아래의 "섭취 − 배설 = 밸런스" 요약.
+  /// 간호사가 상세를 여는 이유가 결국 이 숫자라서 가장 크게 보여준다.
+  Widget _detailBalanceSummary({
+    required int intakeMl,
+    required int outputMl,
+  }) {
+    final balance = intakeMl - outputMl;
+    final over = balance.abs() > ioBalanceThresholdMl;
+    final sign = balance > 0 ? '+' : '';
+
+    Widget block(String label, String value, Color color) {
+      return Expanded(
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: over ? const Color(0xFFFEF2F2) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: over ? const Color(0xFFFECACA) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              block('섭취', '$intakeMl', const Color(0xFF0F766E)),
+              const Text('−',
+                  style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900)),
+              block('배설', '$outputMl', const Color(0xFF2563EB)),
+              const Text('=',
+                  style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900)),
+              block(
+                '밸런스',
+                '$sign$balance',
+                over ? const Color(0xFFEF4444) : const Color(0xFF0F172A),
+              ),
+            ],
+          ),
+          if (over) ...[
+            const SizedBox(height: 10),
+            Text(
+              '±$ioBalanceThresholdMl ml를 넘었습니다. 확인이 필요합니다.',
+              style: const TextStyle(
+                color: Color(0xFFEF4444),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 14개 열이 눌리지 않고 다 들어가는 최소 폭.
   /// 이보다 창이 좁으면 열을 줄이는 대신 가로 스크롤로 넘긴다.
   static const double dashboardTableMinWidth = 1560;
 
@@ -1799,22 +2023,24 @@ class _StationPageState extends State<StationPage> {
                     headingRowHeight: 60,
                     dataRowMinHeight: 74,
                     dataRowMaxHeight: 110,
+                    // 간호과 '섭취·배설 기록지' 양식의 칸 순서를 그대로 따른다.
+                    // 메디로에 옮겨 적을 때 눈이 왔다갔다 하지 않게 하기 위함.
+                    // (수액은 양식에 없는 칸이라 섭취 끝에 따로 둔다.)
                     columns: const [
                       DataColumn(label: Text('병실')),
                       DataColumn(label: Text('환자(나이)')),
-                      DataColumn(label: Text('아침')),
-                      DataColumn(label: Text('점심')),
-                      DataColumn(label: Text('저녁')),
-                      DataColumn(label: Text('식사(g)')),
-                      DataColumn(label: Text('식사수분(ml)')),
-                      DataColumn(label: Text('수분(ml)')),
-                      DataColumn(label: Text('총수분(ml)')),
-                      DataColumn(label: Text('소변(ml)')),
+                      DataColumn(label: Text('튜브')),
+                      DataColumn(label: Text('구강')),
+                      DataColumn(label: Text('수액')),
+                      DataColumn(label: Text('섭취 총량')),
+                      DataColumn(label: Text('자연배뇨')),
+                      DataColumn(label: Text('카테타')),
+                      DataColumn(label: Text('실금')),
                       DataColumn(label: Text('기저귀(g)')),
-                      DataColumn(label: Text('대변')),
+                      DataColumn(label: Text('배설 총량')),
+                      DataColumn(label: Text('배변')),
                       DataColumn(label: Text('밸런스(ml)')),
                       DataColumn(label: Text('상태')),
-                      DataColumn(label: Text('특이사항')),
                     ],
                     rows: summaries.map((item) {
                       final status = item['status'] as String;
@@ -1822,8 +2048,6 @@ class _StationPageState extends State<StationPage> {
                       final bool active = item['isActive'] == true;
                       final patientId = item['patientId'].toString();
                       final patientName = item['name'].toString();
-                      final edema = toInt(item['edemaGrade']);
-                      final stool = toInt(item['stoolType']);
                       final displayName =
                           age > 0 ? '$patientName\n($age세)' : patientName;
 
@@ -1885,15 +2109,17 @@ class _StationPageState extends State<StationPage> {
                               age: age,
                             ),
                           ),
-                          DataCell(mealMark(item['breakfastRecorded'])),
-                          DataCell(mealMark(item['lunchRecorded'])),
-                          DataCell(mealMark(item['dinnerRecorded'])),
-                          DataCell(Text('${item['totalFoodGram']}')),
-                          DataCell(Text('${item['totalSoupMl']}')),
-                          DataCell(Text('${item['totalWaterMl']}')),
-                          DataCell(Text('${item['totalFluidInputMl']}')),
-                          DataCell(Text('${item['urineMl']}')),
-                          DataCell(Text('${item['diaperGram']}')),
+                          // ── 섭취량 (기록지 양식 순서) ──
+                          DataCell(amountCell(toInt(item['tubeMl']))),
+                          DataCell(amountCell(toInt(item['oralMl']))),
+                          DataCell(amountCell(toInt(item['ivMl']))),
+                          DataCell(totalCell(toInt(item['totalFluidInputMl']))),
+                          // ── 배설량 ──
+                          DataCell(amountCell(toInt(item['naturalMl']))),
+                          DataCell(amountCell(toInt(item['catheterMl']))),
+                          DataCell(amountCell(toInt(item['incontinenceMl']))),
+                          DataCell(amountCell(toInt(item['diaperGram']))),
+                          DataCell(totalCell(toInt(item['outputTotalMl']))),
                           DataCell(
                             Text(
                               '${item['stoolCount']}회 / ${item['stoolGram']}g',
@@ -1920,54 +2146,8 @@ class _StationPageState extends State<StationPage> {
                                     )
                                 : null,
                           )),
-                          DataCell(
-                            // 칩 라벨 길이가 상태에 따라 바뀌므로(부종 / 부종 +4,
-                            // 배변타입 / BSS 7) Row로 두면 좁을 때 넘친다.
-                            // Wrap이면 다음 줄로 흘러 빗금이 생기지 않는다.
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                assessmentChip(
-                                  label: edemaLabel(edema),
-                                  isSet: edema > 0,
-                                  color: const Color(0xFF7C3AED),
-                                  onTap: () => showScaleDialog(
-                                    title: '부종 (Edema)',
-                                    patientName: patientName,
-                                    scale: edemaScale,
-                                    current: edema,
-                                    color: const Color(0xFF7C3AED),
-                                    onSelect: (v) =>
-                                        saveAssessment(patientId, edemaGrade: v),
-                                  ),
-                                ),
-                                assessmentChip(
-                                  label: stoolLabel(stool),
-                                  isSet: stool > 0,
-                                  color: const Color(0xFF0F766E),
-                                  onTap: () => showScaleDialog(
-                                    title: '배변 타입 (BSS)',
-                                    patientName: patientName,
-                                    scale: stoolScale,
-                                    current: stool,
-                                    color: const Color(0xFF0F766E),
-                                    onSelect: (v) =>
-                                        saveAssessment(patientId, stoolType: v),
-                                  ),
-                                ),
-                                detailButton(
-                                  onTap: () => showPatientDetailDialog(
-                                    patientId: patientId,
-                                    name: patientName,
-                                    room: item['room'].toString(),
-                                    age: age,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // 부종·배변타입(BSS)과 시간별 기록은 상세 화면으로 옮겼다.
+                          // 대시보드는 메디로에 옮겨 적을 숫자만 남긴다.
                         ],
                       );
                     }).toList(),
@@ -2131,7 +2311,7 @@ class _StationPageState extends State<StationPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: Text('Care Note · $todayString'),
+        title: Text('Balancare · $todayString'),
         actions: [
           if (canApproveNurses)
             IconButton(

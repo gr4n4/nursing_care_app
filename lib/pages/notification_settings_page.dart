@@ -461,7 +461,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'CARE NOTE',
+                  'BALANCARE',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,

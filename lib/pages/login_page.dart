@@ -340,7 +340,7 @@ class _LoginPageState extends State<LoginPage> {
                     logoMark(),
                     const SizedBox(height: 20),
                     const Text(
-                      'Care Note',
+                      'Balancare',
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.w800,

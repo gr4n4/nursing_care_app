@@ -1,6 +1,6 @@
 {
-    "name": "Care Note",
-    "short_name": "Care Note",
+    "name": "Balancare",
+    "short_name": "Balancare",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#EAF8F6",
