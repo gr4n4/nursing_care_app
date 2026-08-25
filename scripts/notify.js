@@ -156,6 +156,13 @@ async function main() {
   const dateKey = careDateKey(kst);
   const nowMinutes = minutesOfDay(kst);
 
+  // 이번 간호일이 시작된 실제 시각(그날 오전 7시)을 UTC 기준 Date로.
+  // 배설 기록이 하나도 없을 때 "얼마나 지났나"의 기준점으로 쓴다.
+  const careDayStartAt = new Date(
+    Date.parse(`${dateKey}T00:00:00Z`) +
+      (CARE_DAY_START_HOUR * 60 - KST_OFFSET_MINUTES) * 60 * 1000
+  );
+
   console.log(`실행 시각(KST): ${kst.toISOString().slice(11, 16)}, 간호일: ${dateKey}`);
 
   const mealChecks = settings.mealChecks || {};
@@ -178,10 +185,17 @@ async function main() {
 
   // ---------- 데이터 로드 ----------
 
+  // 배설은 "마지막 기록 이후 얼마나 지났나"를 보므로 오늘 것만으로는 부족하다.
+  // 어젯밤 기록이 마지막일 수 있어 전날 간호일까지 함께 읽는다.
+  const prevDateKey = careDateKey(new Date(kst.getTime() - 24 * 60 * 60 * 1000));
+
   const [patientsSnap, mealSnap, outputSnap, tokensSnap] = await Promise.all([
     db.collection('patients').get(),
     db.collection('meal_records').where('date', '==', dateKey).get(),
-    db.collection('output_records').where('date', '==', dateKey).get(),
+    db
+      .collection('output_records')
+      .where('date', 'in', [dateKey, prevDateKey])
+      .get(),
     db.collection('push_tokens').get(),
   ]);
 
@@ -252,17 +266,25 @@ async function main() {
     // 배설: 마지막 기록 이후 임계 시간을 넘겼으면
     const last = lastOutputByPatient.get(pid);
     const thresholdMs = outputThresholdHours * 60 * 60 * 1000;
-    const elapsedMs = last ? Date.now() - last.getTime() : null;
 
-    if (last && elapsedMs > thresholdMs) {
+    // 기록이 아예 없는 경우가 가장 확인이 필요한 상황이다.
+    // 기준점이 없으면 간호일 시작(오전 7시)부터 흐른 시간으로 센다.
+    const referenceAt = last || careDayStartAt;
+    const elapsedMs = Date.now() - referenceAt.getTime();
+
+    if (elapsedMs > thresholdMs) {
       const hours = Math.floor(elapsedMs / (60 * 60 * 1000));
+      const body = last
+        ? `${who}의 배설 기록이 ${hours}시간째 없습니다. 확인해주세요.`
+        : `${who}의 배설 기록이 오늘 아직 없습니다(${hours}시간 경과). 확인해주세요.`;
+
       pending.push({
         // 계속 기록이 없으면 임계 시간마다 다시 알린다.
         logId: `${pid}_${dateKey}_output`,
         repeatAfterMs: thresholdMs,
         tag: `output_${pid}`,
         title: '배설 기록 확인',
-        body: `${who}의 배설 기록이 ${hours}시간째 없습니다. 확인해주세요.`,
+        body,
         kind: 'output',
         patientId: pid,
         patientName: name,
