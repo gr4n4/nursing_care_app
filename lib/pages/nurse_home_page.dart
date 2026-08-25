@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../utils/care_date.dart';
+import '../widgets/notification_bell.dart';
 import 'input_choice_page.dart';
 import 'login_page.dart';
-import 'notification_settings_page.dart';
 import 'nurse_profile_edit_page.dart';
 import 'patient_profile_edit_page.dart';
 import 'patient_register_page.dart';
@@ -84,8 +84,8 @@ class NurseHomePage extends StatefulWidget {
 }
 
 class _NurseHomePageState extends State<NurseHomePage> {
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFE6FAF8);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
@@ -259,13 +259,6 @@ class _NurseHomePageState extends State<NurseHomePage> {
       MaterialPageRoute(builder: (_) => const NurseProfileEditPage()),
     );
     refreshPage();
-  }
-
-  Future<void> openNotificationSettingsPage() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
-    );
   }
 
   Future<void> logout() async {
@@ -455,7 +448,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
       padding: const EdgeInsets.fromLTRB(22, 24, 18, 26),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF7CCFC6), Color(0xFF3DB8AA)],
+          colors: [Color(0xFF16305E), Color(0xFF22437C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -508,10 +501,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
               onTap: () => setState(() => manageMode = true),
             ),
             const SizedBox(width: 8),
-            headerIconButton(
-              icon: Icons.notifications_active_rounded,
-              onTap: openNotificationSettingsPage,
-            ),
+            const NotificationBell(onDarkHeader: true),
             const SizedBox(width: 8),
             headerIconButton(
               icon: Icons.badge_rounded,
@@ -559,7 +549,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
         color: recorded ? mintSoft : const Color(0xFFFEF2F2),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: recorded ? const Color(0xFFC7EEE9) : const Color(0xFFFECACA),
+          color: recorded ? const Color(0xFFC3D5EE) : const Color(0xFFFECACA),
         ),
       ),
       child: Row(
@@ -690,7 +680,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       decoration: BoxDecoration(
                         color: mintSoft,
                         borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: const Color(0xFFC7EEE9)),
+                        border: Border.all(color: const Color(0xFFC3D5EE)),
                       ),
                       child: Text(
                         roomText,

@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../utils/feedback.dart';
 import '../utils/push_messaging.dart';
-import 'notification_log_page.dart';
 
 /// 기록 누락 푸시 알림의 규칙을 정하는 화면.
 ///
@@ -23,8 +22,8 @@ class NotificationSettingsPage extends StatefulWidget {
 }
 
 class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFE6FAF8);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
@@ -348,7 +347,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               decoration: BoxDecoration(
                 color: mintSoft,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFC7EEE9)),
+                border: Border.all(color: const Color(0xFFC3D5EE)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -403,7 +402,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     color: selected ? mintDark : mintSoft,
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: selected ? mintDark : const Color(0xFFC7EEE9),
+                      color: selected ? mintDark : const Color(0xFFC3D5EE),
                     ),
                   ),
                   child: Text(
@@ -428,7 +427,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       padding: const EdgeInsets.fromLTRB(22, 24, 18, 28),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF7CCFC6), Color(0xFF3DB8AA)],
+          colors: [Color(0xFF16305E), Color(0xFF22437C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -580,32 +579,6 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// 알림 기록 화면으로 가는 카드.
-  /// 폰 알림창에 여러 건이 뭉쳐 오면 무슨 알림인지 알 수 없어서 여기서 확인한다.
-  Widget logLinkCard() {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const NotificationLogPage()),
-      ),
-      child: sectionCard(
-        child: Row(
-          children: [
-            Expanded(
-              child: sectionTitle(
-                '알림 기록',
-                '어떤 알림이 언제 갔는지 확인합니다.',
-                Icons.history_rounded,
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: textGrey, size: 26),
-          ],
-        ),
       ),
     );
   }
@@ -777,7 +750,6 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                                 children: [
                                   deviceCard(),
                                   if (loadErrorText != null) loadWarningCard(),
-                                  logLinkCard(),
                                   masterCard(),
                                   mealCard(),
                                   outputCard(),

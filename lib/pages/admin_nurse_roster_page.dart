@@ -8,7 +8,7 @@ import 'login_page.dart';
 class AdminNurseRosterPage extends StatelessWidget {
   const AdminNurseRosterPage({super.key});
 
-  static const Color mintDark = Color(0xFF0F766E);
+  static const Color mintDark = Color(0xFF16305E);
   static const Color textDark = Color(0xFF111827);
   static const Color textGrey = Color(0xFF6B7280);
   static const Color borderGrey = Color(0xFFE5E7EB);
@@ -77,7 +77,7 @@ class AdminNurseRosterPage extends StatelessWidget {
               '간호사',
               style: TextStyle(
                 fontSize: 13,
-                color: Color(0xFF7CCFC6),
+                color: Color(0xFF16305E),
                 fontWeight: FontWeight.bold,
               ),
             ),

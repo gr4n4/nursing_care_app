@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/food_table.dart';
 import '../utils/care_date.dart';
+import '../theme/app_colors.dart';
+import '../widgets/notification_bell.dart';
 import '../utils/feedback.dart';
 import '../utils/record_export.dart';
 import 'admin_nurse_roster_page.dart';
@@ -150,7 +152,7 @@ class _StationPageState extends State<StationPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE6FAF8),
+                        color: const Color(0xFFDCE7F5),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -158,7 +160,7 @@ class _StationPageState extends State<StationPage> {
                             ? '엑셀 파일 1개를 내려받습니다.'
                             : '${days.length}일치 → 파일 ${days.length}개를 zip으로 묶어 내려받습니다.',
                         style: const TextStyle(
-                          color: Color(0xFF0F766E),
+                          color: Color(0xFF16305E),
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
                         ),
@@ -284,7 +286,7 @@ class _StationPageState extends State<StationPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F766E),
+          color: const Color(0xFF16305E),
           borderRadius: BorderRadius.circular(14),
         ),
         child: const Row(
@@ -341,7 +343,7 @@ class _StationPageState extends State<StationPage> {
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: const Row(
                 children: [
-                  Icon(Icons.manage_accounts_rounded, color: Color(0xFF0F766E)),
+                  Icon(Icons.manage_accounts_rounded, color: Color(0xFF16305E)),
                   SizedBox(width: 8),
                   Text('환자 목록 관리'),
                 ],
@@ -379,14 +381,14 @@ class _StationPageState extends State<StationPage> {
                                 active ? '대시보드 보임' : '숨김',
                                 style: TextStyle(
                                   color: active
-                                      ? const Color(0xFF0F766E)
+                                      ? const Color(0xFF16305E)
                                       : const Color(0xFF94A3B8),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               trailing: Switch(
                                 value: active,
-                                activeColor: const Color(0xFF0F766E),
+                                activeColor: const Color(0xFF16305E),
                                 onChanged: (v) async {
                                   await FirebaseFirestore.instance
                                       .collection('patients')
@@ -718,7 +720,7 @@ class _StationPageState extends State<StationPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       child: Material(
-        color: selected ? const Color(0xFF14B8A6) : Colors.transparent,
+        color: selected ? const Color(0xFF16305E) : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -764,7 +766,7 @@ class _StationPageState extends State<StationPage> {
     return SizedBox(
       width: 230,
       child: Container(
-        color: const Color(0xFFE6FAF8),
+        color: const Color(0xFFDCE7F5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -775,8 +777,8 @@ class _StationPageState extends State<StationPage> {
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Color(0xFFE6FAF8),
-                    Color(0xFFC7EEE9),
+                    Color(0xFFDCE7F5),
+                    Color(0xFFC3D5EE),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -883,7 +885,7 @@ class _StationPageState extends State<StationPage> {
                     Icon(
                       Icons.assignment_turned_in_rounded,
                       size: 54,
-                      color: Color(0xFF7CCFC6),
+                      color: Color(0xFF16305E),
                     ),
                     SizedBox(height: 12),
                     Text(
@@ -892,7 +894,7 @@ class _StationPageState extends State<StationPage> {
                       style: TextStyle(
                         height: 1.45,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF134E4A),
+                        color: Color(0xFF16305E),
                       ),
                     ),
                   ],
@@ -946,14 +948,14 @@ class _StationPageState extends State<StationPage> {
             width: 62,
             height: 62,
             decoration: BoxDecoration(
-              color: const Color(0xFFE6FAF8),
+              color: const Color(0xFFDCE7F5),
               borderRadius: BorderRadius.circular(22),
             ),
             child: Icon(
               role == 'admin'
                   ? Icons.admin_panel_settings_rounded
                   : Icons.medical_services_rounded,
-              color: const Color(0xFF0F766E),
+              color: const Color(0xFF16305E),
               size: 34,
             ),
           ),
@@ -985,6 +987,8 @@ class _StationPageState extends State<StationPage> {
             ),
             const SizedBox(width: 8),
           ],
+          const NotificationBell(),
+          const SizedBox(width: 8),
           headerIconButton(
             icon: Icons.refresh_rounded,
             label: '새로고침',
@@ -1151,7 +1155,7 @@ class _StationPageState extends State<StationPage> {
               title: '전체 환자',
               value: '$totalPatients명',
               icon: Icons.groups_rounded,
-              color: const Color(0xFF14B8A6),
+              color: const Color(0xFF16305E),
               width: cardWidth,
             ),
             summaryCard(
@@ -1181,6 +1185,130 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  /// 표 위에 놓는 요약 띠.
+  ///
+  /// 관제 화면의 첫 임무는 "지금 몇 명을 봐야 하나"에 답하는 것이다.
+  /// 이게 없으면 17개 열짜리 표를 끝까지 훑어야 그 답이 나온다.
+  Widget summaryStrip(List<Map<String, dynamic>> summaries) {
+    // 숨긴 환자는 대시보드 아래로 빠지므로 집계에서도 뺀다.
+    final rows = summaries.where((s) => s['isActive'] == true).toList();
+
+    var missing = 0, caution = 0, normal = 0;
+    var intakeSum = 0, outputSum = 0;
+
+    for (final s in rows) {
+      final status = (s['status'] ?? '').toString();
+      if (status == '미기록') {
+        missing++;
+      } else if (status == '주의' && s['balanceCleared'] != true) {
+        caution++;
+      } else {
+        normal++;
+      }
+      intakeSum += toInt(s['totalFluidInputMl']);
+      outputSum += toInt(s['outputTotalMl']);
+    }
+
+    final n = rows.isEmpty ? 1 : rows.length;
+
+    Widget tile({
+      required String label,
+      required String value,
+      required String sub,
+      Color? valueColor,
+    }) {
+      return Expanded(
+        child: Container(
+          // IntrinsicHeight의 예측 높이와 실제 글자 높이가 1~2px 어긋나 넘침이 났다.
+          // 고정 높이를 주면 측정이 개입하지 않아 확실하다.
+          height: 96,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          alignment: Alignment.centerLeft,
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.inkDim,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: valueColor ?? AppColors.ink,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  height: 1.15,
+                ),
+              ),
+              Text(
+                sub,
+                style: const TextStyle(
+                  color: AppColors.inkDim,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.line,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      // 칸 사이 1px 간격이 배경색(line)으로 비쳐 구분선이 된다.
+      // 칸마다 높이가 고정이라 stretch나 IntrinsicHeight가 필요 없다.
+      child: Row(
+        children: [
+          tile(
+            label: '미기록',
+            value: '$missing',
+            sub: '식사·배설 모두 없음',
+            valueColor: missing > 0 ? AppColors.danger : AppColors.inkDim,
+          ),
+          const SizedBox(width: 1),
+          tile(
+            label: '밸런스 주의',
+            value: '$caution',
+            sub: '±$ioBalanceThresholdMl ml 초과',
+            valueColor: caution > 0 ? AppColors.warn : AppColors.inkDim,
+          ),
+          const SizedBox(width: 1),
+          tile(
+            label: '정상',
+            value: '$normal',
+            sub: '전체 ${rows.length}명',
+            valueColor: AppColors.ok,
+          ),
+          const SizedBox(width: 1),
+          tile(
+            label: '평균 섭취',
+            value: '${(intakeSum / n).round()}',
+            sub: 'ml / 명',
+          ),
+          const SizedBox(width: 1),
+          tile(
+            label: '평균 배설',
+            value: '${(outputSum / n).round()}',
+            sub: 'ml / 명',
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 병실 + 환자명을 한 칸에. 두 칸으로 나눠도 이동 경로가 같아 나눌 이유가 없다.
   Widget patientCell({
     required String room,
@@ -1195,17 +1323,17 @@ class _StationPageState extends State<StationPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFFE6FAF8) : const Color(0xFFF1F5F9),
+            color: active ? const Color(0xFFDCE7F5) : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: active ? const Color(0xFFC7EEE9) : const Color(0xFFE2E8F0),
+              color: active ? const Color(0xFFC3D5EE) : const Color(0xFFE2E8F0),
             ),
           ),
           child: Text(
             roomText,
             style: TextStyle(
               color: active
-                  ? const Color(0xFF0F766E)
+                  ? const Color(0xFF16305E)
                   : const Color(0xFF94A3B8),
               fontSize: 13,
               fontWeight: FontWeight.w900,
@@ -1263,7 +1391,16 @@ class _StationPageState extends State<StationPage> {
         style: TextStyle(color: Color(0xFFCBD5E1), fontWeight: FontWeight.w700),
       );
     }
-    return Text('$value');
+    // 원자료는 옮겨 적을 값이지 판단할 값이 아니다. 총량·밸런스보다 작고 흐리게
+    // 두어야 눈이 판단값을 먼저 잡는다.
+    return Text(
+      '$value',
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.inkMid,
+      ),
+    );
   }
 
   /// 총량 칸. 옮겨 적을 때 기준이 되는 값이라 진하게 강조한다.
@@ -1271,7 +1408,8 @@ class _StationPageState extends State<StationPage> {
     return Text(
       value <= 0 ? '-' : '$value',
       style: TextStyle(
-        color: value <= 0 ? const Color(0xFFCBD5E1) : const Color(0xFF0F172A),
+        color: value <= 0 ? const Color(0xFFCBD5E1) : AppColors.ink,
+        fontSize: 16,
         fontWeight: FontWeight.w900,
       ),
     );
@@ -1679,10 +1817,12 @@ class _StationPageState extends State<StationPage> {
           Icon(Icons.warning_amber_rounded, size: 17, color: color),
           const SizedBox(width: 4),
         ],
+        // 이 표에서 유일하게 '판단'에 쓰는 숫자라 가장 크게 둔다.
         Text(
           '$sign$balanceMl',
           style: TextStyle(
             color: color,
+            fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1853,14 +1993,14 @@ class _StationPageState extends State<StationPage> {
                       const Color(0xFFF1F5F9),
                     ),
                     headingTextStyle: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      color: Color(0xFF1E293B),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: AppColors.inkMid,
                     ),
                     dataTextStyle: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                     headingRowHeight: 60,
                     dataRowMinHeight: 74,
@@ -1995,13 +2135,13 @@ class _StationPageState extends State<StationPage> {
                                 assessmentChip(
                                   label: stoolLabel(stool),
                                   isSet: stool > 0,
-                                  color: const Color(0xFF0F766E),
+                                  color: AppColors.stool,
                                   onTap: () => showScaleDialog(
                                     title: '배변 타입 (BSS)',
                                     patientName: patientName,
                                     scale: stoolScale,
                                     current: stool,
-                                    color: const Color(0xFF0F766E),
+                                    color: AppColors.stool,
                                     onSelect: (v) =>
                                         saveAssessment(patientId, stoolType: v),
                                   ),
@@ -2150,6 +2290,8 @@ class _StationPageState extends State<StationPage> {
                         ],
                       ),
                       const SizedBox(height: 18),
+                      summaryStrip(summaries),
+                      const SizedBox(height: 14),
                       dashboardTable(summaries),
                       const SizedBox(height: 30),
                       infoFooter(),

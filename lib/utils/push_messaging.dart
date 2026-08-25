@@ -202,7 +202,7 @@ class PushMessaging {
             children: [
               const Icon(
                 Icons.notifications_active_rounded,
-                color: Color(0xFF7CCFC6),
+                color: Color(0xFF16305E),
                 size: 22,
               ),
               const SizedBox(width: 12),

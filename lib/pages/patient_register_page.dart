@@ -13,8 +13,8 @@ class PatientRegisterPage extends StatefulWidget {
 }
 
 class _PatientRegisterPageState extends State<PatientRegisterPage> {
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFE6FAF8);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textGrey = Color(0xFF64748B);
   static const Color borderGrey = Color(0xFFE5E7EB);
@@ -160,7 +160,7 @@ class _PatientRegisterPageState extends State<PatientRegisterPage> {
       padding: const EdgeInsets.fromLTRB(20, 20, 18, 24),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF7CCFC6), Color(0xFF3DB8AA)],
+          colors: [Color(0xFF16305E), Color(0xFF22437C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

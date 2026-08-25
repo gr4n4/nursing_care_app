@@ -23,9 +23,9 @@ class OutputRecordPage extends StatefulWidget {
 }
 
 class _OutputRecordPageState extends State<OutputRecordPage> {
-  static const Color mint = Color(0xFF7CCFC6);
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFE6FAF8);
+  static const Color mint = Color(0xFF16305E);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
@@ -377,8 +377,8 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFF7CCFC6),
-            Color(0xFF3DB8AA),
+            Color(0xFF16305E),
+            Color(0xFF22437C),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -524,7 +524,7 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
         color: recorded ? mintSoft : const Color(0xFFFEF2F2),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: recorded ? const Color(0xFFC7EEE9) : const Color(0xFFFECACA),
+          color: recorded ? const Color(0xFFC3D5EE) : const Color(0xFFFECACA),
         ),
       ),
       child: FittedBox(
@@ -788,7 +788,7 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
           decoration: BoxDecoration(
             color: mintSoft,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFC7EEE9)),
+            border: Border.all(color: const Color(0xFFC3D5EE)),
           ),
           child: Text(
             label,
@@ -972,7 +972,7 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
           tilePadding: const EdgeInsets.symmetric(horizontal: 14),
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
           leading:
-              const Icon(Icons.menu_book_rounded, color: Color(0xFF0F766E)),
+              const Icon(Icons.menu_book_rounded, color: Color(0xFF16305E)),
           title: const Text(
             '배변 척도(BSS) 참고표',
             style: TextStyle(
@@ -999,7 +999,7 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F766E),
+                      color: const Color(0xFF16305E),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(

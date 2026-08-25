@@ -140,11 +140,11 @@ class _PatientListPageState extends State<PatientListPage> {
                 ),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFE6FAF8),
+                    backgroundColor: const Color(0xFFDCE7F5),
                     child: Text(
                       patient.room.isEmpty ? '-' : patient.room,
                       style: const TextStyle(
-                        color: Color(0xFF0F766E),
+                        color: Color(0xFF16305E),
                         fontWeight: FontWeight.bold,
                       ),
                     ),

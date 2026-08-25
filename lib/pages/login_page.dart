@@ -14,9 +14,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  static const Color mint = Color(0xFF7CCFC6);
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFEAF8F6);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFF4F6FB);
   static const Color textDark = Color(0xFF111827);
   static const Color textGrey = Color(0xFF6B7280);
   static const Color borderGrey = Color(0xFFE5E7EB);
@@ -215,18 +214,23 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// 로그인 화면 로고.
+  ///
+  /// 정식 로고 파일(assets/icon/balancare_logo.png)이 들어오면 아래 Image로 교체한다.
+  /// 그 전까지는 같은 자리·같은 크기의 임시 표식을 쓴다.
+  ///   child: Image.asset('assets/icon/balancare_logo.png', width: 72, height: 72),
   Widget logoMark() {
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color: mint.withOpacity(0.18),
+        color: const Color(0xFFDCE7F5),
         borderRadius: BorderRadius.circular(24),
       ),
       child: const Icon(
-        Icons.local_hospital_rounded,
+        Icons.monitor_weight_rounded,
         size: 38,
-        color: Color(0xFF3AAFA9),
+        color: Color(0xFF16305E),
       ),
     );
   }

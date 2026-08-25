@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
+import 'theme/app_colors.dart';
 import 'utils/push_messaging.dart';
 import 'pages/login_page.dart';
 import 'pages/station_page.dart';
@@ -38,9 +39,9 @@ class CareNoteApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        scaffoldBackgroundColor: AppColors.pageBg,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7CCFC6),
+          seedColor: AppColors.brand,
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(
@@ -64,14 +65,14 @@ class CareNoteApp extends StatelessWidget {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(
-              color: Color(0xFF7CCFC6),
+              color: AppColors.interactive,
               width: 2,
             ),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF7CCFC6),
+            backgroundColor: AppColors.brand,
             foregroundColor: Colors.white,
             minimumSize: const Size.fromHeight(52),
             shape: RoundedRectangleBorder(
@@ -150,7 +151,8 @@ class AuthGate extends StatelessWidget {
         final user = authSnapshot.data;
 
         if (user == null) {
-          return const LoginPage();
+          // 로그인 화면도 첫 화면이라 뒤로 갈 곳이 없다.
+          return const PopScope(canPop: false, child: LoginPage());
         }
 
         return FutureBuilder<Widget>(
@@ -164,7 +166,13 @@ class AuthGate extends StatelessWidget {
               );
             }
 
-            return pageSnapshot.data!;
+            // 첫 화면에서 더 뒤로 가면 앱 이전의 빈 기록으로 빠져나가
+            // 흰 화면만 남는다(iOS 홈화면 PWA는 브라우저 UI도 없어 갇힌다).
+            // 스와이프든 브라우저 뒤로가기든 여기서 막는다.
+            return PopScope(
+              canPop: false,
+              child: pageSnapshot.data!,
+            );
           },
         );
       },

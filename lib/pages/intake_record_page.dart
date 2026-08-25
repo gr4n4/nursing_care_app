@@ -33,9 +33,9 @@ class IntakeRecordPage extends StatefulWidget {
 }
 
 class _IntakeRecordPageState extends State<IntakeRecordPage> {
-  static const Color mint = Color(0xFF7CCFC6);
-  static const Color mintDark = Color(0xFF0F766E);
-  static const Color mintSoft = Color(0xFFE6FAF8);
+  static const Color mint = Color(0xFF16305E);
+  static const Color mintDark = Color(0xFF16305E);
+  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
@@ -618,7 +618,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
       padding: const EdgeInsets.fromLTRB(22, 24, 18, 28),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF7CCFC6), Color(0xFF3DB8AA)],
+          colors: [Color(0xFF16305E), Color(0xFF22437C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -850,7 +850,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
         decoration: BoxDecoration(
           color: mintSoft,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFC7EEE9)),
+          border: Border.all(color: const Color(0xFFC3D5EE)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1603,7 +1603,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
                   decoration: BoxDecoration(
                     color: mintSoft,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFC7EEE9)),
+                    border: Border.all(color: const Color(0xFFC3D5EE)),
                   ),
                   child: Text(
                     '$ml',
@@ -1697,7 +1697,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
       decoration: BoxDecoration(
         color: mintSoft,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFC7EEE9)),
+        border: Border.all(color: const Color(0xFFC3D5EE)),
       ),
       child: Row(
         children: [
@@ -2066,7 +2066,7 @@ class _ServingEditDialog extends StatefulWidget {
 }
 
 class _ServingEditDialogState extends State<_ServingEditDialog> {
-  static const Color mintDark = Color(0xFF0F766E);
+  static const Color mintDark = Color(0xFF16305E);
   static const Color textGrey = Color(0xFF64748B);
 
   late final TextEditingController controller;

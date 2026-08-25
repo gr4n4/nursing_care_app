@@ -95,11 +95,11 @@ class PatientDetailPage extends StatelessWidget {
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFFE6FAF8),
+                  backgroundColor: const Color(0xFFDCE7F5),
                   child: Text(
                     patient.room.isEmpty ? '-' : patient.room,
                     style: const TextStyle(
-                      color: Color(0xFF0F766E),
+                      color: Color(0xFF16305E),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -126,7 +126,7 @@ class PatientDetailPage extends StatelessWidget {
               title: '섭취량 기록',
               subtitle: '식사, 음용수, 수분 섭취량 기록',
               icon: Icons.restaurant_rounded,
-              color: const Color(0xFF3AAFA9),
+              color: const Color(0xFF16305E),
               onTap: () {
                 Navigator.push(
                   context,
