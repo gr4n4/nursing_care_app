@@ -501,7 +501,22 @@ class _NurseHomePageState extends State<NurseHomePage> {
               onTap: () => setState(() => manageMode = true),
             ),
             const SizedBox(width: 8),
-            const NotificationBell(onDarkHeader: true),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                headerIconButton(
+                  icon: Icons.notifications_none_rounded,
+                  onTap: () => NotificationBell.open(context),
+                ),
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: NotificationBell.unreadDot(
+                    borderColor: mintDark,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(width: 8),
             headerIconButton(
               icon: Icons.badge_rounded,

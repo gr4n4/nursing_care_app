@@ -1,19 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../pages/notification_log_page.dart';
 import '../pages/notification_settings_page.dart';
 import '../theme/app_colors.dart';
 
-/// 상단 종 모양 버튼. 누르면 최근 알림이 바로 아래로 펼쳐진다.
+/// 상단 종 버튼의 동작과 '안 읽음' 표시를 담당한다.
 ///
-/// 전에는 알림 설정 화면까지 들어가야 기록을 볼 수 있었다. 알림은 "왔는지 확인"이
-/// 잦은 일이라 메인 화면에서 한 번에 닿아야 한다. 설정은 이 패널 아래쪽 링크로 옮겼다.
-class NotificationBell extends StatelessWidget {
-  /// 헤더 배경이 어두우면(그라데이션 헤더) 아이콘을 흰색으로 쓴다.
-  final bool onDarkHeader;
-
-  const NotificationBell({super.key, this.onDarkHeader = false});
+/// 버튼 모양은 페이지마다 다르다(대시보드는 아이콘+글씨, 앱은 원형). 그래서
+/// 이 클래스는 모양을 그리지 않고, 각 페이지가 자기 버튼에 [unreadDot]을 겹치고
+/// [open]을 연결해 쓴다. 모양까지 여기서 그리면 헤더마다 크기가 어긋난다.
+///
+/// 읽음 시각은 users/{email}.notificationsReadAt 에 남긴다. 기기마다 따로 두면
+/// 폰에서 확인해도 대시보드에 점이 남아 헷갈린다.
+class NotificationBell {
+  const NotificationBell._();
 
   /// 최근 알림 몇 건만. 전체는 패널의 '전체 보기'로 넘긴다.
   static const int previewCount = 8;
@@ -23,7 +25,7 @@ class NotificationBell extends StatelessWidget {
       .orderBy('sentAt', descending: true)
       .limit(previewCount);
 
-  String _timeText(dynamic sentAt) {
+  static String _timeText(dynamic sentAt) {
     if (sentAt is! Timestamp) return '';
     final dt = sentAt.toDate();
     final now = DateTime.now();
@@ -38,8 +40,11 @@ class NotificationBell extends StatelessWidget {
         '${dt.day.toString().padLeft(2, '0')} $hm';
   }
 
-  void _openPanel(BuildContext context) {
-    showDialog<void>(
+  static Future<void> open(BuildContext context) async {
+    await _markRead();
+    if (!context.mounted) return;
+
+    await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.08),
       builder: (ctx) {
@@ -63,7 +68,7 @@ class NotificationBell extends StatelessWidget {
     );
   }
 
-  Widget _panelBody(BuildContext ctx) {
+  static Widget _panelBody(BuildContext ctx) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -169,7 +174,7 @@ class NotificationBell extends StatelessWidget {
     );
   }
 
-  Widget _message(String title, String body, {bool isError = false}) {
+  static Widget _message(String title, String body, {bool isError = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 22),
       child: Column(
@@ -207,7 +212,7 @@ class NotificationBell extends StatelessWidget {
     );
   }
 
-  Widget _row(Map<String, dynamic> data) {
+  static Widget _row(Map<String, dynamic> data) {
     final isMeal = (data['kind'] ?? '').toString() == 'meal';
     final room = (data['room'] ?? '').toString();
     final name = (data['patientName'] ?? '').toString();
@@ -283,65 +288,61 @@ class NotificationBell extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = onDarkHeader ? Colors.white : AppColors.inkMid;
+  /// 로그인 계정의 마지막 확인 시각을 지금으로 남긴다.
+  static Future<void> _markRead() async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(email).set(
+        {'notificationsReadAt': Timestamp.now()},
+        SetOptions(merge: true),
+      ).timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // 읽음 표시를 못 남겨도 알림 확인 자체는 되어야 하므로 조용히 넘긴다.
+    }
+  }
 
-    // 오늘 온 알림이 있으면 종에 점을 찍어 "볼 게 있다"를 알린다.
+  /// 마지막 확인 이후 새 알림이 있으면 빨간 점을 그린다. 없으면 아무것도 안 그린다.
+  /// 버튼 위젯을 Stack으로 감싸고 이 위젯을 올려 쓴다.
+  static Widget unreadDot({Color borderColor = Colors.white, double size = 9}) {
+    final email = FirebaseAuth.instance.currentUser?.email;
+
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query.snapshots(),
-      builder: (context, snapshot) {
-        var hasToday = false;
-        if (snapshot.hasData) {
-          final now = DateTime.now();
-          for (final d in snapshot.data!.docs) {
-            final ts = d.data()['sentAt'];
-            if (ts is! Timestamp) continue;
-            final dt = ts.toDate();
-            if (dt.year == now.year &&
-                dt.month == now.month &&
-                dt.day == now.day) {
-              hasToday = true;
-              break;
-            }
-          }
+      stream: FirebaseFirestore.instance
+          .collection('notification_log')
+          .orderBy('sentAt', descending: true)
+          .limit(1)
+          .snapshots(),
+      builder: (context, logSnap) {
+        if (!logSnap.hasData || logSnap.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
         }
+        final latest = logSnap.data!.docs.first.data()['sentAt'];
+        if (latest is! Timestamp) return const SizedBox.shrink();
 
-        return Tooltip(
-          message: '알림',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: () => _openPanel(context),
-            child: Padding(
-              padding: const EdgeInsets.all(9),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(Icons.notifications_none_rounded,
-                      size: 22, color: iconColor),
-                  if (hasToday)
-                    Positioned(
-                      right: -1,
-                      top: -1,
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          color: AppColors.danger,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: onDarkHeader
-                                ? AppColors.brand
-                                : AppColors.surface,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+        if (email == null) return const SizedBox.shrink();
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(email)
+              .snapshots(),
+          builder: (context, userSnap) {
+            final readAt = userSnap.data?.data()?['notificationsReadAt'];
+            final unread =
+                readAt is! Timestamp || latest.compareTo(readAt) > 0;
+            if (!unread) return const SizedBox.shrink();
+
+            return Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: AppColors.danger,
+                shape: BoxShape.circle,
+                border: Border.all(color: borderColor, width: 1.5),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );

@@ -987,7 +987,23 @@ class _StationPageState extends State<StationPage> {
             ),
             const SizedBox(width: 8),
           ],
-          const NotificationBell(),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              headerIconButton(
+                icon: Icons.notifications_none_rounded,
+                label: '알림로그',
+                onTap: () => NotificationBell.open(context),
+              ),
+              Positioned(
+                right: 18,
+                top: 6,
+                child: NotificationBell.unreadDot(
+                  borderColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(width: 8),
           headerIconButton(
             icon: Icons.refresh_rounded,
