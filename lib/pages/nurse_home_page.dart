@@ -466,6 +466,17 @@ class _NurseHomePageState extends State<NurseHomePage> {
       ),
       child: Row(
         children: [
+          // 이 화면은 두 가지로 열린다.
+          //  - 로그인 직후의 첫 화면(폰)  → 돌아갈 곳이 없다
+          //  - 대시보드 사이드바의 '환자 기록 입력'(웹) → 돌아갈 곳이 있다
+          // 후자인데 버튼이 없으면 대시보드로 돌아갈 방법이 없어 갇힌다.
+          if (Navigator.canPop(context)) ...[
+            headerIconButton(
+              icon: Icons.arrow_back_rounded,
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
