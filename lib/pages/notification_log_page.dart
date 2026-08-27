@@ -75,14 +75,20 @@ class NotificationLogPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'NRCAREC',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
+              Expanded(
+                child: Image.asset(
+                  'assets/icon/nrcarec_wordmark_white.png',
+                  width: 150,
+                  fit: BoxFit.contain,
+                  // 그림을 못 읽어도 화면은 떠야 하므로 글자로 대체한다.
+                  errorBuilder: (_, _, _) => const Text(
+                    'NRCAREC',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ),

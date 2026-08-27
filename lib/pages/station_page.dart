@@ -771,9 +771,11 @@ class _StationPageState extends State<StationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              height: 130,
+              // 로고(폭150 → 높이 약 83) + 여백 + 날짜 줄이 들어가는 높이.
+              // 고정 높이라 글자 크기가 바뀌면 다시 재야 한다.
+              height: 160,
               width: double.infinity,
-              padding: const EdgeInsets.all(22),
+              padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -787,16 +789,24 @@ class _StationPageState extends State<StationPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'NRCAREC',
-                    style: TextStyle(
-                      fontSize: 27,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF0F172A),
-                      letterSpacing: 0.4,
+                  // 워드마크는 배경이 투명해 사이드바 그라데이션 위에 그대로 얹힌다.
+                  // 글자를 직접 쓰는 것보다 로고를 쓰면 브랜드가 앱 전체에서 일관된다.
+                  Image.asset(
+                    'assets/icon/nrcarec_wordmark.png',
+                    width: 150,
+                    fit: BoxFit.contain,
+                    // 그림을 못 읽어도 대시보드는 떠야 하므로 글자로 대체한다.
+                    errorBuilder: (_, _, _) => const Text(
+                      'NRCAREC',
+                      style: TextStyle(
+                        fontSize: 27,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 10),
                   Text(
                     '$todayString ($weekdayString)',
                     style: const TextStyle(
