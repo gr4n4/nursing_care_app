@@ -216,27 +216,21 @@ class _LoginPageState extends State<LoginPage> {
 
   /// 로그인 화면 로고.
   ///
-  /// 앱 아이콘과 같은 그림을 쓴다. 홈화면 아이콘을 눌러 들어온 사람이
-  /// 같은 그림을 다시 만나야 "제대로 들어왔다"고 느낀다.
-  /// 그림 자체에 배경과 둥근 모서리가 들어 있어 별도 장식을 얹지 않는다.
+  /// 워드마크(NRCarec + 부제)를 그대로 쓴다. 배경이 투명하고 가로형이라
+  /// 흰 카드 위에 얹어도 색 띠가 생기지 않는다.
+  /// 이름이 그림 안에 들어 있어 아래에 이름 텍스트를 따로 두지 않는다.
   Widget logoMark() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: Image.asset(
-        'assets/icon/app_icon.png',
-        width: 88,
-        height: 88,
-        fit: BoxFit.cover,
-        // 그림을 못 읽어도 로그인은 되어야 하므로 대체 표식을 둔다.
-        errorBuilder: (_, _, _) => Container(
-          width: 88,
-          height: 88,
-          color: const Color(0xFFDCE7F5),
-          child: const Icon(
-            Icons.monitor_weight_rounded,
-            size: 42,
-            color: Color(0xFF16305E),
-          ),
+    return Image.asset(
+      'assets/icon/nrcarec_wordmark.png',
+      width: 260,
+      fit: BoxFit.contain,
+      // 그림을 못 읽어도 로그인은 되어야 하므로 글자로 대체한다.
+      errorBuilder: (_, _, _) => const Text(
+        'NRCarec',
+        style: TextStyle(
+          fontSize: 34,
+          fontWeight: FontWeight.w800,
+          color: textDark,
         ),
       ),
     );
@@ -349,16 +343,7 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     logoMark(),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Balancare',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        color: textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     const Text(
                       '식사 · 수분 · 배설 통합 관리',
                       style: TextStyle(

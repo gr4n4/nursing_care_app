@@ -406,7 +406,7 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'BALANCARE',
+                  'NRCAREC',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,

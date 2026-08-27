@@ -85,7 +85,7 @@ flutter:
   # 로그인 화면에서 쓰는 그림들.
   assets:
     - assets/icon/app_icon.png
-    - assets/icon/balancare_wordmark.png
+    - assets/icon/nrcarec_wordmark.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

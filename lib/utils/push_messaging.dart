@@ -178,7 +178,7 @@ class PushMessaging {
 
     FirebaseMessaging.onMessage.listen((message) {
       final data = message.data;
-      final title = (data['title'] ?? message.notification?.title ?? 'Balancare')
+      final title = (data['title'] ?? message.notification?.title ?? 'NRCarec')
           .toString();
       final body = (data['body'] ?? message.notification?.body ?? '').toString();
 

@@ -1,4 +1,4 @@
-/* Care Note 웹 푸시 수신용 서비스워커.
+/* NRCarec 웹 푸시 수신용 서비스워커.
  *
  * 앱이 꺼져 있거나 브라우저가 백그라운드일 때 알림을 띄우는 주체다.
  * 이 파일은 Flutter 빌드에 그대로 복사되며, 반드시 사이트 루트
@@ -38,10 +38,11 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function (payload) {
   const data = payload.data || {};
 
-  const title = data.title || 'Care Note';
+  const title = data.title || 'NRCarec';
   const options = {
     body: data.body || '',
-    icon: '/icons/Icon-192.png',
+    // 발송 쪽에서 종류별 아이콘을 지정한다(식사/배설). 없으면 앱 아이콘.
+    icon: data.icon || '/icons/Icon-192.png',
     badge: '/icons/Icon-192.png',
     // 같은 환자·같은 종류의 알림이 쌓이지 않고 최신 것으로 갱신되게 한다.
     tag: data.tag || 'carenote',
@@ -53,7 +54,7 @@ messaging.onBackgroundMessage(function (payload) {
   return self.registration.showNotification(title, options);
 });
 
-// 알림을 누르면 이미 열려 있는 Care Note 탭으로 이동하고, 없으면 새로 연다.
+// 알림을 누르면 이미 열려 있는 NRCarec 탭으로 이동하고, 없으면 새로 연다.
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 

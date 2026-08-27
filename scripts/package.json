@@ -1,8 +1,8 @@
 {
-  "name": "carenote-notify",
+  "name": "nrcarec-notify",
   "version": "1.0.0",
   "private": true,
-  "description": "Care Note 기록 누락 알림 발송 스크립트 (GitHub Actions에서 실행)",
+  "description": "NRCarec 기록 누락 알림 발송 스크립트 (GitHub Actions에서 실행)",
   "main": "notify.js",
   "scripts": {
     "notify": "node notify.js"

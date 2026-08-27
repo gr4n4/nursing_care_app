@@ -274,7 +274,7 @@ class _NurseProfileEditPageState extends State<NurseProfileEditPage> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'BALANCARE',
+                'NRCAREC',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,

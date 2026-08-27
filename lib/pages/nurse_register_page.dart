@@ -221,7 +221,7 @@ class _NurseRegisterPageState extends State<NurseRegisterPage> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'BALANCARE',
+                'NRCAREC',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,

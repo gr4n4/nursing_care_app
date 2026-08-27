@@ -23,7 +23,7 @@ class RecordExport {
     if (dates.length == 1) {
       final key = careDateKey(dates.first);
       final bytes = await _buildWorkbook(key);
-      _download('밸런케어_섭취배설_$key.xlsx', bytes);
+      _download('NRCarec_섭취배설_$key.xlsx', bytes);
       return;
     }
 
@@ -31,14 +31,14 @@ class RecordExport {
     for (final d in dates) {
       final key = careDateKey(d);
       final bytes = await _buildWorkbook(key);
-      archive.addFile(ArchiveFile('밸런케어_섭취배설_$key.xlsx', bytes.length, bytes));
+      archive.addFile(ArchiveFile('NRCarec_섭취배설_$key.xlsx', bytes.length, bytes));
     }
 
     final zipped = ZipEncoder().encode(archive);
     if (zipped == null) return;
     final first = careDateKey(dates.first);
     final last = careDateKey(dates.last);
-    _download('밸런케어_섭취배설_${first}_$last.zip', zipped);
+    _download('NRCarec_섭취배설_${first}_$last.zip', zipped);
   }
 
   // ---------- 엑셀 만들기 ----------

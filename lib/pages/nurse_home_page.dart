@@ -475,7 +475,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'BALANCARE',
+                  'NRCAREC',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 22,

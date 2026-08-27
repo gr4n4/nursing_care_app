@@ -1,5 +1,5 @@
 /**
- * Care Note 기록 누락 알림 발송 스크립트.
+ * NRCarec 기록 누락 알림 발송 스크립트.
  *
  * GitHub Actions가 주기적으로 실행한다(.github/workflows/notify.yml).
  * Firestore의 settings/notifications 규칙을 읽어, 오늘 기록이 빠진 환자를 찾아
@@ -103,7 +103,7 @@ async function sendTestNotification(db) {
   const res = await admin.messaging().sendEachForMulticast({
     tokens,
     data: {
-      title: 'Care Note 테스트 알림',
+      title: 'NRCarec 테스트 알림',
       body: `알림이 정상적으로 도착했습니다. (발송 ${hhmm})`,
       // 테스트는 매번 새로 보이게 tag를 고정하지 않는다.
       tag: `test_${Date.now()}`,
@@ -256,6 +256,7 @@ async function main() {
         title: '식사 기록 누락',
         body: `${who}의 ${meal.label} 식사 기록이 입력되지 않았습니다. 확인하여 기입해주세요.`,
         kind: 'meal',
+        icon: '/icons/notify-meal.png',
         patientId: pid,
         patientName: name,
         room,
@@ -286,6 +287,7 @@ async function main() {
         title: '배설 기록 확인',
         body,
         kind: 'output',
+        icon: '/icons/notify-output.png',
         patientId: pid,
         patientName: name,
         room,
@@ -341,6 +343,8 @@ async function main() {
         title: item.title,
         body: item.body,
         tag: item.tag,
+        // 잠금화면에서 무슨 알림인지 글을 읽기 전에 알아보도록 종류별로 다른 그림을 쓴다.
+        icon: item.icon,
         url: '/',
       },
       webpush: {

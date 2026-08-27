@@ -639,7 +639,7 @@ class _IntakeRecordPageState extends State<IntakeRecordPage> {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'BALANCARE',
+                  'NRCAREC',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,

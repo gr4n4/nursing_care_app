@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Balancare 색 팔레트 — 앱 전체가 참조하는 단일 출처.
+/// NRCarec 색 팔레트 — 앱 전체가 참조하는 단일 출처.
 ///
 /// 이전에는 페이지마다 `static const Color mintDark = Color(0xFF0F766E)` 식으로
 /// 같은 값을 12개 파일에 따로 선언해 두어, 색을 바꾸려면 전부 손대야 했다.

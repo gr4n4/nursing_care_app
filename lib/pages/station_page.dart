@@ -788,7 +788,7 @@ class _StationPageState extends State<StationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'BALANCARE',
+                    'NRCAREC',
                     style: TextStyle(
                       fontSize: 27,
                       fontWeight: FontWeight.w900,
@@ -2332,7 +2332,7 @@ class _StationPageState extends State<StationPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: Text('Balancare · $todayString'),
+        title: Text('NRCarec · $todayString'),
         actions: [
           if (canApproveNurses)
             IconButton(
