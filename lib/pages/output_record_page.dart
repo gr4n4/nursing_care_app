@@ -405,18 +405,23 @@ class _OutputRecordPageState extends State<OutputRecordPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Image.asset(
-                  'assets/icon/nrcarec_wordmark_white.png',
-                  width: 168,
-                  fit: BoxFit.contain,
-                  // 그림을 못 읽어도 화면은 떠야 하므로 글자로 대체한다.
-                  errorBuilder: (_, _, _) => const Text(
-                    'NRCAREC',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
+                // Expanded 는 남은 폭을 전부 주므로 그 안의 Image 는 width 가
+                // 무시되고 헤더 폭만큼 커진다. Align 으로 크기를 묶고 왼쪽에 붙인다.
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Image.asset(
+                    'assets/icon/nrcarec_wordmark_white.png',
+                    width: 142,
+                    fit: BoxFit.contain,
+                    // 그림을 못 읽어도 화면은 떠야 하므로 글자로 대체한다.
+                    errorBuilder: (_, _, _) => const Text(
+                      'NRCAREC',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ),

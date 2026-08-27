@@ -792,8 +792,8 @@ class _StationPageState extends State<StationPage> {
                   // 글자를 직접 쓰는 것보다 로고를 쓰면 브랜드가 앱 전체에서 일관된다.
                   Image.asset(
                     'assets/icon/nrcarec_wordmark.png',
-                    // 사이드바 폭 230에서 좌우 여백 20씩을 뺀 값.
-                    width: 190,
+                    // 사이드바 폭 230에서 좌우 여백을 넉넉히 뺀 값.
+                    width: 165,
                     fit: BoxFit.contain,
                     // 그림을 못 읽어도 대시보드는 떠야 하므로 글자로 대체한다.
                     errorBuilder: (_, _, _) => const Text(

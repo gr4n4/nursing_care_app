@@ -222,7 +222,8 @@ class _LoginPageState extends State<LoginPage> {
   Widget logoMark() {
     return Image.asset(
       'assets/icon/nrcarec_wordmark.png',
-      width: 300,
+      // 비율 3.22라 폭 220이면 높이 약 68. 카드 폭(약 400) 대비 과하지 않다.
+      width: 220,
       fit: BoxFit.contain,
       // 그림을 못 읽어도 로그인은 되어야 하므로 글자로 대체한다.
       errorBuilder: (_, _, _) => const Text(
@@ -338,7 +339,9 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(28),
+                // 로고가 카드 가장자리에 붙어 답답해 보여 여백을 넓혔다.
+                // 위쪽을 조금 더 준 이유는 로고 자체에 여백이 없기 때문.
+                padding: const EdgeInsets.fromLTRB(30, 38, 30, 34),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
