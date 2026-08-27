@@ -222,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget logoMark() {
     return Image.asset(
       'assets/icon/nrcarec_wordmark.png',
-      width: 260,
+      width: 300,
       fit: BoxFit.contain,
       // 그림을 못 읽어도 로그인은 되어야 하므로 글자로 대체한다.
       errorBuilder: (_, _, _) => const Text(

@@ -476,7 +476,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
               children: [
                 Image.asset(
                   'assets/icon/nrcarec_wordmark_white.png',
-                  width: 150,
+                  width: 168,
                   fit: BoxFit.contain,
                   // 그림을 못 읽어도 화면은 떠야 하므로 글자로 대체한다.
                   errorBuilder: (_, _, _) => const Text(

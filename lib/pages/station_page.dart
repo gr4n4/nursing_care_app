@@ -771,9 +771,9 @@ class _StationPageState extends State<StationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              // 로고(폭150 → 높이 약 83) + 여백 + 날짜 줄이 들어가는 높이.
-              // 고정 높이라 글자 크기가 바뀌면 다시 재야 한다.
-              height: 160,
+              // 로고(폭190 → 높이 약 67) + 여백 + 날짜 줄이 들어가는 높이.
+              // 고정 높이라 로고 크기나 글자 크기가 바뀌면 다시 재야 한다.
+              height: 140,
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
               decoration: const BoxDecoration(
@@ -793,7 +793,7 @@ class _StationPageState extends State<StationPage> {
                   // 글자를 직접 쓰는 것보다 로고를 쓰면 브랜드가 앱 전체에서 일관된다.
                   Image.asset(
                     'assets/icon/nrcarec_wordmark.png',
-                    width: 150,
+                    width: 190,
                     fit: BoxFit.contain,
                     // 그림을 못 읽어도 대시보드는 떠야 하므로 글자로 대체한다.
                     errorBuilder: (_, _, _) => const Text(
