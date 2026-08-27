@@ -771,11 +771,10 @@ class _StationPageState extends State<StationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              // 로고(폭190 → 높이 약 67) + 여백 + 날짜 줄이 들어가는 높이.
-              // 고정 높이라 로고 크기나 글자 크기가 바뀌면 다시 재야 한다.
-              height: 140,
+              // 높이를 고정하지 않는다. 로고를 바꿀 때마다 높이를 다시 재야 했고,
+              // 조금만 어긋나도 넘치거나 아래가 휑했다. 내용에 맞춰 감싸게 둔다.
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -793,6 +792,7 @@ class _StationPageState extends State<StationPage> {
                   // 글자를 직접 쓰는 것보다 로고를 쓰면 브랜드가 앱 전체에서 일관된다.
                   Image.asset(
                     'assets/icon/nrcarec_wordmark.png',
+                    // 사이드바 폭 230에서 좌우 여백 20씩을 뺀 값.
                     width: 190,
                     fit: BoxFit.contain,
                     // 그림을 못 읽어도 대시보드는 떠야 하므로 글자로 대체한다.
@@ -806,13 +806,16 @@ class _StationPageState extends State<StationPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
+                  // 로고 아래 날짜. 로고가 가로로 길어 글자가 작으면 허전해 보여
+                  // 로고 폭에 맞춰 한 줄을 꽉 채우도록 크기를 맞췄다.
                   Text(
                     '$todayString ($weekdayString)',
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0F172A),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1E3A5F),
+                      letterSpacing: 0.2,
                     ),
                   ),
                 ],
