@@ -51,3 +51,4 @@ app.*.map.json
 .agents/
 skills-lock.json
 scripts/node_modules/
+backup_before_cleanup_*.json

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../utils/notification_kind.dart';
+
 /// 지금까지 발송된 기록 누락 알림 목록.
 ///
 /// 폰 알림창에 여러 건이 뭉쳐 오면 어떤 환자의 무슨 알림인지 알 수 없어서,
@@ -124,7 +126,7 @@ class NotificationLogPage extends StatelessWidget {
 
   Widget logTile(Map<String, dynamic> data) {
     final kind = (data['kind'] ?? '').toString();
-    final isMeal = kind == 'meal';
+    final style = NotificationKind.of(kind);
 
     final sent = data['sentAt'];
     final sentText =
@@ -154,12 +156,12 @@ class NotificationLogPage extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: isMeal ? mintSoft : const Color(0xFFE8F0FE),
+              color: style.background,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
-              isMeal ? Icons.restaurant_rounded : Icons.water_drop_rounded,
-              color: isMeal ? mintDark : const Color(0xFF2563EB),
+              style.icon,
+              color: style.color,
               size: 22,
             ),
           ),

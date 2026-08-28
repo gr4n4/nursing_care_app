@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../pages/notification_log_page.dart';
 import '../pages/notification_settings_page.dart';
 import '../theme/app_colors.dart';
+import '../utils/notification_kind.dart';
 
 /// 상단 종 버튼의 동작과 '안 읽음' 표시를 담당한다.
 ///
@@ -213,7 +214,7 @@ class NotificationBell {
   }
 
   static Widget _row(Map<String, dynamic> data) {
-    final isMeal = (data['kind'] ?? '').toString() == 'meal';
+    final style = NotificationKind.of((data['kind'] ?? '').toString());
     final room = (data['room'] ?? '').toString();
     final name = (data['patientName'] ?? '').toString();
     final who = name.isEmpty
@@ -229,13 +230,13 @@ class NotificationBell {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: isMeal ? AppColors.brandSoft : const Color(0xFFE3EEFB),
+              color: style.background,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              isMeal ? Icons.restaurant_rounded : Icons.water_drop_rounded,
+              style.icon,
               size: 18,
-              color: isMeal ? AppColors.brand : AppColors.fluid,
+              color: style.color,
             ),
           ),
           const SizedBox(width: 11),

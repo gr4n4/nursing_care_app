@@ -67,6 +67,9 @@ class _PatientDayPageState extends State<PatientDayPage> {
   List<Map<String, dynamic>> meals = [];
   Map<String, List<Map<String, dynamic>>> waterByCat = {};
   List<Map<String, dynamic>> outputs = [];
+
+  /// 이 환자의 센서 경보(낙상·걸터앉음) 이력.
+  List<Map<String, dynamic>> sensorAlerts = [];
   Map<String, dynamic>? assess;
 
   int intakeMl = 0;
@@ -120,6 +123,35 @@ class _PatientDayPageState extends State<PatientDayPage> {
           .doc('${widget.patientId}_$dateKey')
           .get();
 
+      // 센서 경보는 emfit_server 가 보내는 것이라 patientId 가 없다.
+      // 병실+이름으로 맞춘다. 정렬만 걸어 최근 것을 받아 거르므로 복합 색인이 없어도 된다.
+      final alertSnap = await db
+          .collection('notification_log')
+          .orderBy('sentAt', descending: true)
+          .limit(100)
+          .get();
+
+      // 병실 표기가 양쪽에서 다르다. 앱은 '신관 421', 센서는 '421' 로 보낸다.
+      // 숫자만 뽑아 비교해야 어느 쪽 표기든 맞는다.
+      String roomNo(String v) {
+        final m = RegExp(r'\d+').firstMatch(v);
+        return m?.group(0) ?? '';
+      }
+
+      final myRoom = roomNo(widget.room);
+      final myName = widget.name.trim();
+      final alerts = alertSnap.docs
+          .map((d) => d.data())
+          .where((d) {
+            final kind = (d['kind'] ?? '').toString();
+            if (kind != 'fall' && kind != 'bedside') return false;
+            final name = (d['patientName'] ?? '').toString().trim();
+            // 이름이 같으면 같은 환자로 본다. 병실은 이동할 수 있어 보조 조건으로만 쓴다.
+            if (name.isNotEmpty && name == myName) return true;
+            return myRoom.isNotEmpty && roomNo((d['room'] ?? '').toString()) == myRoom;
+          })
+          .toList();
+
       if (!mounted) return;
 
       const mealOrder = {'breakfast': 0, 'lunch': 1, 'dinner': 2};
@@ -161,6 +193,7 @@ class _PatientDayPageState extends State<PatientDayPage> {
         waterByCat = byCat;
         outputs = outputList;
         assess = assessDoc.data();
+        sensorAlerts = alerts;
         intakeMl = intake;
         outputMl = out;
         loading = false;
@@ -516,6 +549,120 @@ class _PatientDayPageState extends State<PatientDayPage> {
 
   /// 특이사항 — 부종·배변타입의 '기록된 값'과 그 단계 설명.
   /// 입력은 대시보드에서 하므로 여기서는 읽기 전용이다.
+  /// 센서 경보 이력(낙상·걸터앉음).
+  ///
+  /// 낙상은 그때 놓쳤더라도 나중에 "언제 몇 번 있었나"를 확인할 수 있어야 한다.
+  /// 알림은 지나가지만 이력은 남는다.
+  Widget sensorAlertCard() {
+    String whenText(dynamic sentAt) {
+      if (sentAt is! Timestamp) return '';
+      final dt = sentAt.toDate();
+      final now = DateTime.now();
+      final hm = '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}';
+      final sameDay =
+          dt.year == now.year && dt.month == now.month && dt.day == now.day;
+      if (sameDay) return '오늘 $hm';
+      return '${dt.month.toString().padLeft(2, '0')}.'
+          '${dt.day.toString().padLeft(2, '0')} $hm';
+    }
+
+    final fallCount =
+        sensorAlerts.where((a) => (a['kind'] ?? '') == 'fall').length;
+
+    return card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: cardTitle(
+                  '센서 경보',
+                  Icons.sensors_rounded,
+                  fallCount > 0 ? dangerColor : textGrey,
+                ),
+              ),
+              if (fallCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFCE9E9),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '낙상 $fallCount회',
+                    style: const TextStyle(
+                      color: dangerColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (sensorAlerts.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(
+                '기록된 경보가 없습니다.',
+                style: TextStyle(
+                  color: Color(0xFFCBD5E1),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          for (final a in sensorAlerts)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: BoxDecoration(
+                      color: (a['kind'] ?? '') == 'fall'
+                          ? dangerColor
+                          : const Color(0xFFB45309),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 74,
+                    child: Text(
+                      whenText(a['sentAt']),
+                      style: const TextStyle(
+                        color: textGrey,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      (a['title'] ?? '').toString(),
+                      style: TextStyle(
+                        color: (a['kind'] ?? '') == 'fall'
+                            ? dangerColor
+                            : textDark,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget assessmentCard() {
     final edema = toInt(assess?['edemaGrade']);
     final stool = toInt(assess?['stoolType']);
@@ -854,6 +1001,8 @@ class _PatientDayPageState extends State<PatientDayPage> {
                                       ],
                                       const SizedBox(height: 14),
                                       assessmentCard(),
+                                      const SizedBox(height: 14),
+                                      sensorAlertCard(),
                                     ],
                                   ),
                       ),
