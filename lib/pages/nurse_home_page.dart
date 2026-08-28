@@ -173,14 +173,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
     sortPatients(mine);
     sortPatients(others);
 
-    // 내 환자만 오늘 기록 상태를 병렬로 조회한다.
-    await Future.wait(mine.map((p) async {
-      final flags = await loadTodayFlags(p.patientId);
-      p.breakfast = (flags['breakfast'] as bool?) ?? false;
-      p.lunch = (flags['lunch'] as bool?) ?? false;
-      p.dinner = (flags['dinner'] as bool?) ?? false;
-      p.outputCount = (flags['outputCount'] as int?) ?? 0;
-    }));
+    // 오늘 기록 상태를 한 번에 읽는다.
+    //
+    // 전에는 환자마다 meal/output 쿼리를 따로 날려 환자 14명이면 왕복이 29번이었다.
+    // 화면에 들어올 때마다 그걸 반복해 눈에 띄게 느렸다. 날짜로 한 번씩만 읽고
+    // 환자별로는 메모리에서 갈라 쓴다(대시보드가 쓰는 방식과 동일).
+    await applyTodayFlags(mine);
 
     return {
       'nurseName': nurseName,
@@ -189,36 +187,42 @@ class _NurseHomePageState extends State<NurseHomePage> {
     };
   }
 
-  Future<Map<String, dynamic>> loadTodayFlags(String patientId) async {
+  /// 오늘(간호일) 기록 상태를 환자 목록 전체에 한 번에 채운다.
+  /// 쿼리는 컬렉션당 1회씩, 총 2회만 나간다.
+  Future<void> applyTodayFlags(List<HomePatientItem> patients) async {
+    if (patients.isEmpty) return;
+
     final today = careDateKey(DateTime.now());
     final db = FirebaseFirestore.instance;
 
-    final mealSnap = await db
-        .collection('meal_records')
-        .where('patientId', isEqualTo: patientId)
-        .where('date', isEqualTo: today)
-        .get();
+    final results = await Future.wait([
+      db.collection('meal_records').where('date', isEqualTo: today).get(),
+      db.collection('output_records').where('date', isEqualTo: today).get(),
+    ]);
 
-    bool b = false, l = false, d = false;
-    for (final doc in mealSnap.docs) {
-      final t = (doc.data()['mealType'] ?? '').toString();
-      if (t == 'breakfast') b = true;
-      if (t == 'lunch') l = true;
-      if (t == 'dinner') d = true;
+    final meals = <String, Set<String>>{};
+    for (final doc in results[0].docs) {
+      final data = doc.data();
+      final pid = (data['patientId'] ?? '').toString();
+      if (pid.isEmpty) continue;
+      meals.putIfAbsent(pid, () => <String>{})
+          .add((data['mealType'] ?? '').toString());
     }
 
-    final outSnap = await db
-        .collection('output_records')
-        .where('patientId', isEqualTo: patientId)
-        .where('date', isEqualTo: today)
-        .get();
+    final outputCounts = <String, int>{};
+    for (final doc in results[1].docs) {
+      final pid = (doc.data()['patientId'] ?? '').toString();
+      if (pid.isEmpty) continue;
+      outputCounts[pid] = (outputCounts[pid] ?? 0) + 1;
+    }
 
-    return {
-      'breakfast': b,
-      'lunch': l,
-      'dinner': d,
-      'outputCount': outSnap.docs.length,
-    };
+    for (final p in patients) {
+      final m = meals[p.patientId] ?? const <String>{};
+      p.breakfast = m.contains('breakfast');
+      p.lunch = m.contains('lunch');
+      p.dinner = m.contains('dinner');
+      p.outputCount = outputCounts[p.patientId] ?? 0;
+    }
   }
 
   Future<void> openInputChoice(HomePatientItem patient) async {

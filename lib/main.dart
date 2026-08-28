@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,6 +40,21 @@ class CareNoteApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        // 화면을 손가락으로 밀어 뒤로 가기.
+        //
+        // 기본값은 플랫폼에 따라 갈리고, 웹에서는 안드로이드 전환이 잡혀
+        // 밀기 제스처가 아예 없다. 아이폰 홈화면 PWA로 쓰는 환경이라
+        // 모든 플랫폼에서 Cupertino 전환을 써 밀기 뒤로가기를 켠다.
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+          },
+        ),
         scaffoldBackgroundColor: AppColors.pageBg,
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.brand,
@@ -86,8 +102,21 @@ class CareNoteApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  /// 시작 화면 판별 결과를 캐시한다.
+  ///
+  /// 전에는 build 안에서 future 를 새로 만들고 MediaQuery 까지 읽어서,
+  /// 키보드가 뜨거나 창 크기가 바뀔 때마다 Firestore 를 다시 읽고 화면을
+  /// 통째로 새로 만들었다. 로그인 직후와 화면 전환이 느렸던 원인.
+  Future<Widget>? _startPage;
+  String? _forUid;
 
   Future<Widget> getStartPage(User user, bool wide) async {
     final email = user.email;
@@ -151,12 +180,22 @@ class AuthGate extends StatelessWidget {
         final user = authSnapshot.data;
 
         if (user == null) {
+          _startPage = null;
+          _forUid = null;
           // 로그인 화면도 첫 화면이라 뒤로 갈 곳이 없다.
           return const PopScope(canPop: false, child: LoginPage());
         }
 
+        // 같은 계정이면 판별을 다시 하지 않는다. 화면 크기는 여기서 한 번만 본다.
+        if (_startPage == null || _forUid != user.uid) {
+          _forUid = user.uid;
+          final wide =
+              MediaQueryData.fromView(View.of(context)).size.width >= 900;
+          _startPage = getStartPage(user, wide);
+        }
+
         return FutureBuilder<Widget>(
-          future: getStartPage(user, MediaQuery.of(context).size.width >= 900),
+          future: _startPage,
           builder: (context, pageSnapshot) {
             if (!pageSnapshot.hasData) {
               return const Scaffold(
@@ -168,7 +207,6 @@ class AuthGate extends StatelessWidget {
 
             // 첫 화면에서 더 뒤로 가면 앱 이전의 빈 기록으로 빠져나가
             // 흰 화면만 남는다(iOS 홈화면 PWA는 브라우저 UI도 없어 갇힌다).
-            // 스와이프든 브라우저 뒤로가기든 여기서 막는다.
             return PopScope(
               canPop: false,
               child: pageSnapshot.data!,
