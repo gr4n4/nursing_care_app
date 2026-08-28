@@ -29,6 +29,10 @@ class AlertCenter {
   static bool _dialogOpen = false;
   static web.HTMLAudioElement? _audio;
 
+  /// 소리가 막혔는지. 브라우저가 자동 재생을 거부하면 팝업에서 알려주고
+  /// 직접 누를 수단을 준다. 조용히 실패하면 아무도 모른 채 경보를 놓친다.
+  static final ValueNotifier<bool> soundBlocked = ValueNotifier<bool>(false);
+
   /// 앱을 켠 시각. 이전에 쌓인 지난 경보까지 울리면 안 되므로 기준점을 잡는다.
   static late DateTime _since;
 
@@ -131,21 +135,31 @@ class AlertCenter {
   static void _startSound() {
     if (!kIsWeb) return;
     try {
-      final audio = web.HTMLAudioElement()
-        ..src = 'assets/assets/sound/alert.wav'
-        ..loop = true
-        ..volume = 1.0;
+      // new HTMLAudioElement() 는 브라우저가 막는 생성자다(Illegal constructor).
+      // createElement 로 만들어야 한다.
+      final audio =
+          web.document.createElement('audio') as web.HTMLAudioElement
+            ..src = 'assets/assets/sound/alert.wav'
+            ..loop = true
+            ..volume = 1.0;
       _audio = audio;
       // 브라우저는 사용자가 한 번이라도 조작한 뒤에만 소리를 허용한다.
       // 로그인 과정에서 그 조건은 채워지지만, 막히더라도 팝업은 떠야 한다.
+      soundBlocked.value = false;
       audio.play().toDart.catchError((Object e) {
         debugPrint('경보음 재생 차단됨: $e');
+        soundBlocked.value = true;
         return null;
       });
     } catch (e) {
       debugPrint('경보음 준비 실패: $e');
+      soundBlocked.value = true;
     }
   }
+
+  /// 자동 재생이 막혔을 때 버튼으로 다시 시도한다.
+  /// 사용자가 누른 동작이라 브라우저가 허용한다.
+  static void retrySound() => _startSound();
 
   static void _stopSound() {
     try {
@@ -224,6 +238,21 @@ class _AlertDialog extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
+              ),
+              // 소리가 막혔으면 알려주고 직접 켤 수단을 준다.
+              ValueListenableBuilder<bool>(
+                valueListenable: AlertCenter.soundBlocked,
+                builder: (context, blocked, _) {
+                  if (!blocked) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: OutlinedButton.icon(
+                      onPressed: AlertCenter.retrySound,
+                      icon: const Icon(Icons.volume_up_rounded, size: 18),
+                      label: const Text('소리가 나지 않으면 눌러 주세요'),
+                    ),
+                  );
+                },
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
