@@ -126,6 +126,52 @@ def send_alert(kind, room, patient_name, device_id, detail=''):
     return res.success_count
 ```
 
+## 알림 설정을 따르게 하기
+
+간호사가 앱의 **알림 설정 → 센서 경보**에서 종류를 끄거나 걸터앉음 시간대를
+정할 수 있다. 발송 쪽에서도 그 값을 읽어 걸러야 꺼 둔 알림이 가지 않는다.
+
+`nrcarec_alert.py` 의 `send_alert` 맨 앞에 아래를 넣는다.
+
+```python
+def _wanted(db, kind):
+    """앱의 알림 설정을 따른다. settings/notifications 의 sensorAlerts."""
+    doc = db.collection('settings').document('notifications').get()
+    s = (doc.to_dict() or {}).get('sensorAlerts', {}) if doc.exists else {}
+
+    if kind == 'fall':
+        return s.get('fall', True)
+    if not s.get('bedside', True):
+        return False
+
+    # 걸터앉음만 시간대 제한. 시작과 끝이 같으면 종일.
+    def mins(v):
+        try:
+            h, m = str(v).split(':')
+            return int(h) * 60 + int(m)
+        except Exception:
+            return None
+
+    a, b = mins(s.get('bedsideStart')), mins(s.get('bedsideEnd'))
+    if a is None or b is None or a == b:
+        return True
+    now = datetime.datetime.now()
+    m = now.hour * 60 + now.minute
+    # 자정을 넘기는 구간(22:00~06:00)도 다룬다.
+    return (a <= m < b) if a < b else (m >= a or m < b)
+```
+
+그리고 `send_alert` 안에서 `db` 를 만든 직후:
+
+```python
+    db = firestore.client(app=_app)
+    if not _wanted(db, kind):
+        print(f'[NRCarec] {kind} 는 설정에서 꺼져 있어 보내지 않음')
+        return 0
+```
+
+앱도 같은 값을 보고 팝업을 거른다. 발송 쪽 반영이 늦더라도 화면에는 안 뜬다.
+
 ## 감지 지점에서 부르기
 
 ```python

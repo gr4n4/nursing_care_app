@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/feedback.dart';
+import '../utils/notification_kind.dart';
 import '../utils/push_messaging.dart';
 
 /// 기록 누락 푸시 알림의 규칙을 정하는 화면.
@@ -49,6 +50,14 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   int outputNightHours = 8;
   TimeOfDay nightStart = const TimeOfDay(hour: 22, minute: 0);
   TimeOfDay nightEnd = const TimeOfDay(hour: 6, minute: 0);
+
+  // 센서 경보(AI Radar). 발송은 emfit_server 가 하고, 이 값을 읽어 판단한다.
+  bool fallEnabled = true;
+  bool bedsideEnabled = true;
+
+  // 걸터앉음만 시간대를 제한한다. 낙상은 시간을 가릴 일이 아니라 종일 받는다.
+  TimeOfDay bedsideStart = const TimeOfDay(hour: 0, minute: 0);
+  TimeOfDay bedsideEnd = const TimeOfDay(hour: 0, minute: 0);
 
   // 이 기기(브라우저) 등록 상태
   bool deviceRegistered = false;
@@ -129,6 +138,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       outputNightHours = toInt(output['nightHours'], outputNightHours);
       nightStart = parseTime(output['nightStart'], nightStart);
       nightEnd = parseTime(output['nightEnd'], nightEnd);
+
+      final sensor = (data['sensorAlerts'] as Map<String, dynamic>?) ?? {};
+      fallEnabled = sensor['fall'] != false;
+      bedsideEnabled = sensor['bedside'] != false;
+      bedsideStart = parseTime(sensor['bedsideStart'], bedsideStart);
+      bedsideEnd = parseTime(sensor['bedsideEnd'], bedsideEnd);
     }
 
     setState(() {
@@ -162,6 +177,13 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           'nightHours': outputNightHours,
           'nightStart': formatTime(nightStart),
           'nightEnd': formatTime(nightEnd),
+        },
+        'sensorAlerts': {
+          'fall': fallEnabled,
+          'bedside': bedsideEnabled,
+          // 시작과 끝이 같으면 '종일'로 본다.
+          'bedsideStart': formatTime(bedsideStart),
+          'bedsideEnd': formatTime(bedsideEnd),
         },
         'updatedAt': Timestamp.now(),
         'updatedBy': myEmail,
@@ -711,6 +733,136 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     );
   }
 
+  /// 센서 경보(AI Radar) 설정.
+  ///
+  /// 발송은 emfit_server 가 하고 이 값을 읽어 판단한다. 앱도 같은 값을 보고
+  /// 팝업을 띄울지 정하므로, 어느 쪽으로 와도 꺼 둔 종류는 울리지 않는다.
+  Widget sensorCard() {
+    Widget row({
+      required String title,
+      required String desc,
+      required bool value,
+      required Color color,
+      required ValueChanged<bool> onChanged,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Center(
+                child: NotificationKind.of(
+                  title.startsWith('낙상') ? 'fall' : 'bedside',
+                ).glyph(size: 18, tint: color),
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: textDark,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    desc,
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              activeThumbColor: color,
+              onChanged: (v) => setState(() => onChanged(v)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final allDay = bedsideStart == bedsideEnd;
+
+    return sectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          sectionTitle(
+            '센서 경보',
+            'AI Radar 가 감지하면 소리와 함께 알립니다.',
+            Icons.sensors_rounded,
+          ),
+          row(
+            title: '낙상',
+            desc: '즉시 조치가 필요합니다. 시간을 가리지 않고 알립니다.',
+            value: fallEnabled,
+            color: dangerColor,
+            onChanged: (v) => fallEnabled = v,
+          ),
+          if (!fallEnabled)
+            const Padding(
+              padding: EdgeInsets.only(top: 8, left: 45),
+              child: Text(
+                '낙상 알림이 꺼져 있습니다. 넘어져도 알리지 않습니다.',
+                style: TextStyle(
+                  color: dangerColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          row(
+            title: '걸터앉음',
+            desc: '낙상 전 단계입니다. 시간대를 정할 수 있습니다.',
+            value: bedsideEnabled,
+            color: const Color(0xFFB45309),
+            onChanged: (v) => bedsideEnabled = v,
+          ),
+          if (bedsideEnabled) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 45),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  timeRow('받기 시작', bedsideStart, (v) => bedsideStart = v),
+                  timeRow('받기 종료', bedsideEnd, (v) => bedsideEnd = v),
+                  const SizedBox(height: 8),
+                  Text(
+                    allDay
+                        ? '시작과 종료가 같아 종일 받습니다.'
+                        : '이 시간대에만 걸터앉음 알림을 받습니다.',
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget outputCard() {
     return sectionCard(
       child: Column(
@@ -764,6 +916,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                                   masterCard(),
                                   mealCard(),
                                   outputCard(),
+                                  sensorCard(),
                                   if (saveError != null) ...[
                                     Container(
                                       width: double.infinity,

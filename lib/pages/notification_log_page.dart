@@ -159,11 +159,7 @@ class NotificationLogPage extends StatelessWidget {
               color: style.background,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              style.icon,
-              color: style.color,
-              size: 22,
-            ),
+            child: Center(child: style.glyph(size: 22)),
           ),
           const SizedBox(width: 12),
           Expanded(

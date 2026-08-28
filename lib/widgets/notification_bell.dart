@@ -233,11 +233,7 @@ class NotificationBell {
               color: style.background,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              style.icon,
-              size: 18,
-              color: style.color,
-            ),
+            child: Center(child: style.glyph(size: 18)),
           ),
           const SizedBox(width: 11),
           Expanded(

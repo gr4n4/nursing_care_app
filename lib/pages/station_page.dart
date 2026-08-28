@@ -9,6 +9,7 @@ import '../utils/care_date.dart';
 import '../theme/app_colors.dart';
 import '../widgets/notification_bell.dart';
 import '../utils/feedback.dart';
+import '../utils/notification_kind.dart';
 import '../utils/record_export.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
@@ -532,6 +533,28 @@ class _StationPageState extends State<StationPage> {
       if (pid.isNotEmpty) assessmentByPatient[pid] = data;
     }
 
+    // 센서 경보(낙상·걸터앉음)는 emfit_server 가 보내 patientId 가 없다.
+    // 병실 번호로 맞춘다. 정렬만 걸어 최근 것을 받으므로 복합 색인이 필요 없다.
+    final alertSnapshot = await FirebaseFirestore.instance
+        .collection('notification_log')
+        .orderBy('sentAt', descending: true)
+        .limit(100)
+        .get();
+
+    String roomNo(String v) => RegExp(r'\d+').firstMatch(v)?.group(0) ?? '';
+
+    // 병실번호 -> {낙상 n, 걸터앉음 n}
+    final Map<String, Map<String, int>> alertsByRoom = {};
+    for (final doc in alertSnapshot.docs) {
+      final data = doc.data();
+      final kind = (data['kind'] ?? '').toString();
+      if (kind != 'fall' && kind != 'bedside') continue;
+      final r = roomNo((data['room'] ?? '').toString());
+      if (r.isEmpty) continue;
+      final m = alertsByRoom.putIfAbsent(r, () => {'fall': 0, 'bedside': 0});
+      m[kind] = (m[kind] ?? 0) + 1;
+    }
+
     final List<Map<String, dynamic>> summaries = [];
 
     for (final patientDoc in patientsSnapshot.docs) {
@@ -683,6 +706,10 @@ class _StationPageState extends State<StationPage> {
         'fluidBalanceMl': fluidBalanceMl,
         // 미기록(식사·배설 모두 없음)만 아니면 밸런스를 표시한다.
         'balanceValid': status != '미기록',
+        'fallCount':
+            alertsByRoom[roomNo((patientData['room'] ?? '').toString())]?['fall'] ?? 0,
+        'bedsideCount':
+            alertsByRoom[roomNo((patientData['room'] ?? '').toString())]?['bedside'] ?? 0,
         'edemaGrade': toInt(assessmentByPatient[patientId]?['edemaGrade']),
         'stoolType': toInt(assessmentByPatient[patientId]?['stoolType']),
         // 주의 해제 여부 + 사유 (간호사가 '확인함'으로 처리한 경우)
@@ -1775,6 +1802,54 @@ class _StationPageState extends State<StationPage> {
     );
   }
 
+  /// 센서 경보 칩. 오늘 낙상·걸터앉음이 있었는지 목록에서 바로 보인다.
+  ///
+  /// 환자 페이지에도 이력이 있지만, 낙상은 놓치면 안 되는 정보라
+  /// 첫 화면에서 한 번 더 보여 준다. 없으면 아무것도 그리지 않아
+  /// 평상시 표가 지저분해지지 않는다.
+  Widget alertChip({
+    required int fallCount,
+    required int bedsideCount,
+    required VoidCallback onTap,
+  }) {
+    if (fallCount == 0 && bedsideCount == 0) return const SizedBox.shrink();
+
+    // 낙상이 하나라도 있으면 빨강이 이긴다. 더 급한 쪽을 보여야 한다.
+    final isFall = fallCount > 0;
+    final color = isFall ? AppColors.danger : AppColors.warn;
+    final kind = NotificationKind.of(isFall ? 'fall' : 'bedside');
+    final count = isFall ? fallCount : bedsideCount;
+    final label = isFall ? '낙상' : '걸터앉음';
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: kind.background,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            kind.glyph(size: 15, tint: color),
+            const SizedBox(width: 5),
+            Text(
+              '$label $count',
+              style: TextStyle(
+                color: color,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget assessmentChip({
     required String label,
     required bool isSet,
@@ -2152,6 +2227,16 @@ class _StationPageState extends State<StationPage> {
                               runSpacing: 6,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
+                                alertChip(
+                                  fallCount: toInt(item['fallCount']),
+                                  bedsideCount: toInt(item['bedsideCount']),
+                                  onTap: () => openPatientDayPage(
+                                    patientId: patientId,
+                                    name: patientName,
+                                    room: item['room'].toString(),
+                                    age: age,
+                                  ),
+                                ),
                                 assessmentChip(
                                   label: edemaLabel(edema),
                                   isSet: edema > 0,

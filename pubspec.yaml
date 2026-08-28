@@ -41,6 +41,7 @@ dependencies:
   excel: ^4.0.6
   archive: ^3.6.1
   web: ^1.1.1
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -88,6 +89,8 @@ flutter:
     - assets/icon/nrcarec_wordmark.png
     - assets/icon/nrcarec_wordmark_white.png
     - assets/sound/alert.wav
+    - assets/icon/alert-fall.svg
+    - assets/icon/alert-bedside.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

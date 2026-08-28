@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../theme/app_colors.dart';
+import 'notification_kind.dart';
 
 /// 즉시 조치가 필요한 경보(낙상·걸터앉음)를 소리와 팝업으로 알린다.
 ///
@@ -36,6 +37,39 @@ class AlertCenter {
   /// 앱을 켠 시각. 이전에 쌓인 지난 경보까지 울리면 안 되므로 기준점을 잡는다.
   static late DateTime _since;
 
+  /// 알림 설정. 꺼 둔 종류는 팝업도 띄우지 않는다.
+  /// emfit_server 도 같은 값을 보고 발송을 거르지만, 발송 쪽이 아직 반영 전이거나
+  /// 설정을 바꾼 직후일 수 있어 받는 쪽에서도 확인한다.
+  static Map<String, dynamic> _settings = const {};
+  static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _settingsSub;
+
+  /// 지금 이 종류의 경보를 받기로 되어 있는가.
+  static bool _wanted(String kind) {
+    final sensor = (_settings['sensorAlerts'] as Map<String, dynamic>?) ?? const {};
+    if (kind == 'fall') return sensor['fall'] != false;
+    if (kind != 'bedside') return true;
+    if (sensor['bedside'] == false) return false;
+
+    // 걸터앉음만 시간대 제한이 있다. 시작과 끝이 같으면 종일로 본다.
+    final start = _minutes(sensor['bedsideStart']);
+    final end = _minutes(sensor['bedsideEnd']);
+    if (start == null || end == null || start == end) return true;
+
+    final now = DateTime.now();
+    final m = now.hour * 60 + now.minute;
+    // 자정을 넘기는 구간(예: 22:00~06:00)도 다룬다.
+    return start < end ? (m >= start && m < end) : (m >= start || m < end);
+  }
+
+  static int? _minutes(dynamic hhmm) {
+    final parts = (hhmm ?? '').toString().split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final mi = int.tryParse(parts[1]);
+    if (h == null || mi == null) return null;
+    return h * 60 + mi;
+  }
+
   /// 경보 구독을 시작한다. 로그인 후 한 번만 부른다.
   static void start(GlobalKey<NavigatorState> navigatorKey) {
     if (_sub != null) return;
@@ -44,6 +78,15 @@ class AlertCenter {
     // kind 로 걸러내면서 sentAt 으로 정렬하면 복합 색인이 필요하고, 색인이 만들어지는
     // 동안 구독이 통째로 실패한다. 어차피 앱을 켠 뒤에 새로 오는 경보만 보면 되는데
     // 새 문서는 항상 맨 위에 오므로, 정렬만 걸고 종류는 받아서 거른다.
+    _settingsSub = FirebaseFirestore.instance
+        .collection('settings')
+        .doc('notifications')
+        .snapshots()
+        .listen(
+          (d) => _settings = d.data() ?? const {},
+          onError: (Object e) => debugPrint('알림 설정 구독 오류: $e'),
+        );
+
     _sub = FirebaseFirestore.instance
         .collection('notification_log')
         .orderBy('sentAt', descending: true)
@@ -77,6 +120,8 @@ class AlertCenter {
   static void stop() {
     _sub?.cancel();
     _sub = null;
+    _settingsSub?.cancel();
+    _settingsSub = null;
     _stopSound();
   }
 
@@ -108,6 +153,9 @@ class AlertCenter {
   }) {
     if (_shown.contains(id)) return;
     _shown.add(id);
+
+    // 꺼 둔 종류이거나 받기로 한 시간대가 아니면 조용히 넘긴다.
+    if (!_wanted(kind)) return;
 
     // 경보가 잇달아 와도 팝업을 겹쳐 쌓지 않는다. 확인 후 다음 것이 뜬다.
     if (_dialogOpen) return;
@@ -186,8 +234,7 @@ class _AlertDialog extends StatelessWidget {
 
   Color get accent => isFall ? AppColors.danger : AppColors.warn;
 
-  IconData get icon =>
-      isFall ? Icons.personal_injury_rounded : Icons.airline_seat_flat_rounded;
+
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +259,7 @@ class _AlertDialog extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    Icon(icon, color: Colors.white, size: 46),
+                    NotificationKind.of(kind).glyph(size: 46, tint: Colors.white),
                     const SizedBox(height: 10),
                     Text(
                       title,
