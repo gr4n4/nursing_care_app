@@ -137,6 +137,17 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
+/// 첫 화면에서 뒤로가기를 막아야 하는 환경인가.
+///
+/// iOS 홈화면 PWA 는 브라우저 UI 가 없어, 첫 화면에서 더 뒤로 가면 앱 이전의
+/// 빈 기록으로 빠져나가 흰 화면에 갇힌다. 그래서 막아야 한다.
+///
+/// 안드로이드는 다르다. 뒤로가기가 시스템 기본 조작이라 첫 화면에서 누르면
+/// 앱이 닫히는 것이 정상이고, 그렇게 나가도 런처로 돌아갈 뿐 흰 화면이 아니다.
+/// 여기서 막으면 오히려 앱이 갇힌 것처럼 느껴진다.
+bool get blockRootBack =>
+    kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
 class _AuthGateState extends State<AuthGate> {
   /// 시작 화면 판별 결과를 캐시한다.
   ///
@@ -236,7 +247,7 @@ class _AuthGateState extends State<AuthGate> {
           _startPage = null;
           _forUid = null;
           // 로그인 화면도 첫 화면이라 뒤로 갈 곳이 없다.
-          return const PopScope(canPop: false, child: LoginPage());
+          return PopScope(canPop: !blockRootBack, child: const LoginPage());
         }
 
         // 같은 계정이면 판별을 다시 하지 않는다. 화면 크기는 여기서 한 번만 본다.
@@ -261,7 +272,7 @@ class _AuthGateState extends State<AuthGate> {
             // 첫 화면에서 더 뒤로 가면 앱 이전의 빈 기록으로 빠져나가
             // 흰 화면만 남는다(iOS 홈화면 PWA는 브라우저 UI도 없어 갇힌다).
             return PopScope(
-              canPop: false,
+              canPop: !blockRootBack,
               child: pageSnapshot.data!,
             );
           },
