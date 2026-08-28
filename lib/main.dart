@@ -9,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
+import 'utils/alert_center.dart';
 import 'utils/push_messaging.dart';
 import 'pages/login_page.dart';
 import 'pages/station_page.dart';
@@ -214,6 +215,8 @@ class _AuthGateState extends State<AuthGate> {
     // 탭이 포커스된 상태로 오는 푸시는 서비스워커가 아니라 앱으로 들어온다.
     // 받아서 배너로 띄우지 않으면 아무 데도 안 보이고 사라진다.
     PushMessaging.listenForegroundMessages(CareNoteApp.navigatorKey);
+    // 낙상·걸터앉음 경보 구독. 앱·대시보드가 열려 있으면 즉시 소리와 팝업으로 알린다.
+    AlertCenter.start(CareNoteApp.navigatorKey);
 
     // 좁은 화면(폰/홈화면 PWA)은 간호사 입력 앱, 넓은 화면(데스크톱)은 대시보드로.
     if (role == 'nurse') {

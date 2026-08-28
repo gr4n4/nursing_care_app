@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'alert_center.dart';
 
 /// enableOnThisDevice() 결과. 권한 거부와 토큰 발급 실패(타임아웃 등)는
 /// 사용자에게 다른 안내를 보여줘야 해서 하나의 bool로 뭉치지 않는다.
@@ -178,6 +179,15 @@ class PushMessaging {
 
     FirebaseMessaging.onMessage.listen((message) {
       final data = message.data;
+
+      // 낙상·걸터앉음은 배너로 지나가면 놓친다. 소리와 확인 팝업이 있는
+      // 경보 경로로 넘긴다(Firestore 구독과 중복되면 거기서 걸러진다).
+      final kind = (data['kind'] ?? '').toString();
+      if (AlertCenter.criticalKinds.contains(kind)) {
+        AlertCenter.fromPush(navigatorKey, data);
+        return;
+      }
+
       final title = (data['title'] ?? message.notification?.title ?? 'NRCarec')
           .toString();
       final body = (data['body'] ?? message.notification?.body ?? '').toString();

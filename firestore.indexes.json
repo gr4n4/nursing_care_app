@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "//": "경보 구독용. kind 로 걸러내면서 sentAt 으로 정렬하려면 복합 색인이 필요하다. 없으면 실행 중에 'requires an index' 로 실패한다.",
+      "collectionGroup": "notification_log",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kind", "order": "ASCENDING" },
+        { "fieldPath": "sentAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
