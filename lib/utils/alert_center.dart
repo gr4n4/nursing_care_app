@@ -37,16 +37,21 @@ class AlertCenter {
     if (_sub != null) return;
     _since = DateTime.now();
 
+    // kind 로 걸러내면서 sentAt 으로 정렬하면 복합 색인이 필요하고, 색인이 만들어지는
+    // 동안 구독이 통째로 실패한다. 어차피 앱을 켠 뒤에 새로 오는 경보만 보면 되는데
+    // 새 문서는 항상 맨 위에 오므로, 정렬만 걸고 종류는 받아서 거른다.
     _sub = FirebaseFirestore.instance
         .collection('notification_log')
-        .where('kind', whereIn: criticalKinds.toList())
         .orderBy('sentAt', descending: true)
-        .limit(5)
+        .limit(20)
         .snapshots()
         .listen(
       (snap) {
         for (final doc in snap.docs) {
           final data = doc.data();
+          final kind = (data['kind'] ?? '').toString();
+          if (!criticalKinds.contains(kind)) continue;
+
           final sentAt = data['sentAt'];
           if (sentAt is! Timestamp) continue;
           // 앱을 켜기 전에 있었던 경보는 다시 울리지 않는다.
@@ -55,7 +60,7 @@ class AlertCenter {
           _raise(
             navigatorKey,
             id: doc.id,
-            kind: (data['kind'] ?? '').toString(),
+            kind: kind,
             title: (data['title'] ?? '경보').toString(),
             body: (data['body'] ?? '').toString(),
           );

@@ -1,14 +1,5 @@
 {
-  "indexes": [
-    {
-      "//": "경보 구독용. kind 로 걸러내면서 sentAt 으로 정렬하려면 복합 색인이 필요하다. 없으면 실행 중에 'requires an index' 로 실패한다.",
-      "collectionGroup": "notification_log",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "kind", "order": "ASCENDING" },
-        { "fieldPath": "sentAt", "order": "DESCENDING" }
-      ]
-    }
-  ],
+  "//": "복합 색인 없음. 경보 구독은 sentAt 정렬만 쓰고 종류는 받아서 거르도록 만들어, 색인이 만들어지는 동안 구독이 실패하는 상황을 없앴다.",
+  "indexes": [],
   "fieldOverrides": []
 }
