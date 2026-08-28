@@ -21,6 +21,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // 로그인 유지. 웹 기본값도 이렇지만, 기본값에 기대면 나중에 조용히 바뀔 수 있어
+  // 명시한다. 간호사들이 매번 로그인하지 않아도 되게 하는 것이 목적.
+  if (kIsWeb) {
+    try {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    } catch (e) {
+      debugPrint('로그인 유지 설정 실패: $e');
+    }
+  }
+
   // 읽은 데이터를 기기에 캐시한다.
   //
   // 켜기 전에는 화면을 열 때마다 네트워크 왕복을 기다렸다. 병동 와이파이가
@@ -134,6 +144,15 @@ class _AuthGateState extends State<AuthGate> {
   Future<Widget>? _startPage;
   String? _forUid;
 
+  /// 시작 화면 판별을 처음부터 다시 한다. 오류 화면의 '다시 시도'가 쓴다.
+  void retryStartup() {
+    if (!mounted) return;
+    setState(() {
+      _startPage = null;
+      _forUid = null;
+    });
+  }
+
   Future<Widget> getStartPage(User user, bool wide) async {
     final email = user.email;
 
@@ -141,10 +160,26 @@ class _AuthGateState extends State<AuthGate> {
       return const LoginPage();
     }
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(email)
-        .get();
+    // 권한 조회가 실패해도 로그아웃시키지 않는다.
+    //
+    // 전에는 실패하면 예외가 그대로 올라가 로딩 표시에서 멈췄고, 문서를 못 읽으면
+    // 곧장 로그아웃시켰다. 병동 와이파이가 잠깐 끊긴 것뿐인데 다시 로그인해야 해서
+    // 곤란하다. 네트워크 문제와 '권한이 정말 없는 경우'를 갈라서 처리한다.
+    final DocumentSnapshot<Map<String, dynamic>> userDoc;
+    try {
+      userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(email)
+          .get()
+          .timeout(const Duration(seconds: 20));
+    } catch (e) {
+      return _StartupErrorPage(
+        message: '연결이 원활하지 않아 계정 정보를 불러오지 못했습니다. '
+            '로그인은 유지되어 있으니 잠시 후 다시 시도해 주세요.',
+        detail: '$e',
+        onRetry: retryStartup,
+      );
+    }
 
     if (!userDoc.exists) {
       await FirebaseAuth.instance.signOut();
@@ -230,6 +265,86 @@ class _AuthGateState extends State<AuthGate> {
           },
         );
       },
+    );
+  }
+}
+
+/// 시작할 때 계정 정보를 못 읽었을 때 보여주는 화면.
+///
+/// 로그아웃시키지 않는 것이 핵심이다. 연결이 잠깐 끊긴 것뿐인데 로그인을 풀면
+/// 병동에서 다시 아이디·비밀번호를 찾아 넣어야 한다.
+class _StartupErrorPage extends StatelessWidget {
+  final String message;
+  final String detail;
+  final VoidCallback onRetry;
+
+  const _StartupErrorPage({
+    required this.message,
+    required this.detail,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.pageBg,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.wifi_off_rounded,
+                  size: 46,
+                  color: AppColors.inkDim,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brand,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('다시 시도'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SelectableText(
+                  detail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.inkDim,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
