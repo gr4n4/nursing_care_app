@@ -21,6 +21,22 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // 읽은 데이터를 기기에 캐시한다.
+  //
+  // 켜기 전에는 화면을 열 때마다 네트워크 왕복을 기다렸다. 병동 와이파이가
+  // 느려 그 대기가 그대로 체감됐다. 캐시가 있으면 저장된 값을 먼저 그려 놓고
+  // 서버 응답이 오면 갱신하므로 두 번째부터는 즉시 뜬다.
+  //
+  // 실패해도 앱은 그냥 네트워크로 동작하면 되므로 막지 않는다.
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (e) {
+    debugPrint('Firestore 캐시 설정 실패: $e');
+  }
+
   runApp(const CareNoteApp());
 }
 

@@ -132,21 +132,30 @@ class _NurseHomePageState extends State<NurseHomePage> {
     });
   }
 
+  /// 간호사 이름. 화면에 들어올 때마다 다시 읽을 값이 아니라 한 번만 읽는다.
+  String? _cachedNurseName;
+
   Future<Map<String, dynamic>> loadHome() async {
     final user = FirebaseAuth.instance.currentUser;
     final email = user?.email?.trim().toLowerCase() ?? '';
 
-    String nurseName = '';
-    if (email.isNotEmpty) {
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(email).get();
-      if (userDoc.exists) {
-        nurseName = (userDoc.data()?['name'] ?? '').toString().trim();
-      }
-    }
+    // 이름과 환자 목록은 서로를 기다릴 이유가 없어 함께 던진다.
+    // 순차로 기다리면 느린 망에서 대기 시간이 그대로 더해진다.
+    final needName = _cachedNurseName == null && email.isNotEmpty;
+    final results = await Future.wait([
+      FirebaseFirestore.instance.collection('patients').get(),
+      if (needName)
+        FirebaseFirestore.instance.collection('users').doc(email).get(),
+    ]);
 
-    final snapshot =
-        await FirebaseFirestore.instance.collection('patients').get();
+    if (needName) {
+      final userDoc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
+      _cachedNurseName =
+          (userDoc.data()?['name'] ?? '').toString().trim();
+    }
+    final nurseName = _cachedNurseName ?? '';
+
+    final snapshot = results[0] as QuerySnapshot<Map<String, dynamic>>;
 
     final all = snapshot.docs.map((doc) {
       final data = doc.data();
