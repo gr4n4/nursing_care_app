@@ -93,6 +93,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
   static const Color dangerColor = Color(0xFFEF4444);
 
   int refreshKey = 0;
+
+  /// 마지막으로 불러온 결과.
+  ///
+  /// 화면에 돌아올 때마다 로딩 표시로 갈아치우면, 값이 캐시에 있어도 빈 화면이
+  /// 먼저 보여 느리게 느껴진다. 이전 내용을 그대로 두고 조용히 갱신한다.
+  Map<String, dynamic>? _lastHome;
   bool manageMode = false;
   bool isWorking = false;
 
@@ -1106,14 +1112,20 @@ class _NurseHomePageState extends State<NurseHomePage> {
       key: ValueKey('home_$refreshKey'),
       future: loadHome(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
+        if (snapshot.hasData) {
+          _lastHome = snapshot.data;
+        }
+
+        // 처음 들어왔을 때만 로딩을 보여준다. 두 번째부터는 이전 화면을 그대로
+        // 두고 뒤에서 갱신해, 돌아올 때 화면이 끊기지 않는다.
+        if (snapshot.hasError && _lastHome == null) {
           return errorView(snapshot.error);
         }
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData && _lastHome == null) {
           return loadingView();
         }
 
-        final data = snapshot.data!;
+        final data = snapshot.data ?? _lastHome!;
         final nurseName = data['nurseName'].toString();
         final mine = (data['mine'] as List).cast<HomePatientItem>();
         final others = (data['others'] as List).cast<HomePatientItem>();

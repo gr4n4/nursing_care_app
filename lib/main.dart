@@ -123,6 +123,8 @@ class CareNoteApp extends StatelessWidget {
           ),
         ),
       ),
+      // 모든 화면을 감싸 왼쪽 가장자리 밀기를 받는다.
+      builder: (context, child) => _EdgeSwipeBack(child: child),
       home: const AuthGate(),
     );
   }
@@ -346,5 +348,69 @@ class _StartupErrorPage extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 화면 왼쪽을 오른쪽으로 밀면 뒤로 가게 한다.
+///
+/// Flutter 자체 밀기(Cupertino 전환)는 왼쪽 20px 만 감지하는데, iOS 홈화면 PWA
+/// 에서는 바로 그 구간을 iOS 가 자기 기록 이동 제스처로 먼저 가져간다. 그러면
+/// 앱이 아니라 브라우저 기록이 뒤로 가서 흰 화면이 됐다.
+/// 그보다 안쪽까지(48px) 우리가 받아, 시스템이 채가지 않은 밀기를 처리한다.
+class _EdgeSwipeBack extends StatefulWidget {
+  final Widget? child;
+
+  const _EdgeSwipeBack({required this.child});
+
+  @override
+  State<_EdgeSwipeBack> createState() => _EdgeSwipeBackState();
+}
+
+class _EdgeSwipeBackState extends State<_EdgeSwipeBack> {
+  /// iOS 가 가져가는 구간보다 넉넉히 안쪽까지 잡는다.
+  static const double _edgeWidth = 48;
+
+  /// 이만큼 밀어야 뒤로 간다. 너무 짧으면 살짝 스친 것도 뒤로 가버린다.
+  static const double _threshold = 60;
+
+  /// 한 번 민 동작에서 여러 장이 닫히지 않게 잠근다.
+  bool _handled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        if (widget.child != null) widget.child!,
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: _edgeWidth,
+          // 세로 스크롤과 탭은 그대로 아래로 통과시키고, 가로로 미는 것만 잡는다.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: (_) => _handled = false,
+            onHorizontalDragUpdate: (details) {
+              if (_handled) return;
+              if (details.localPosition.dx > _threshold) _pop(context);
+            },
+            onHorizontalDragEnd: (details) {
+              if (_handled) return;
+              // 짧게 튕기듯 민 경우도 받아준다.
+              if ((details.primaryVelocity ?? 0) > 300) _pop(context);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _pop(BuildContext context) {
+    final navigator = Navigator.maybeOf(context);
+    if (navigator == null) return;
+    // 첫 화면이면 나갈 곳이 없다. 여기서 막지 않으면 흰 화면이 된다.
+    if (!navigator.canPop()) return;
+    _handled = true;
+    navigator.maybePop();
   }
 }

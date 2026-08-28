@@ -28,6 +28,11 @@ class StationPage extends StatefulWidget {
 class _StationPageState extends State<StationPage> {
   int refreshKey = 0;
 
+  /// 마지막으로 불러온 환자 요약.
+  /// 새로고침할 때 로딩 표시로 갈아치우면 표가 사라졌다 다시 그려져 깜빡인다.
+  /// 이전 표를 그대로 두고 조용히 갱신한다.
+  List<Map<String, dynamic>>? _lastSummaries;
+
   final ScrollController horizontalController = ScrollController();
   final ScrollController verticalController = ScrollController();
   final ScrollController tableController = ScrollController();
@@ -2445,7 +2450,11 @@ class _StationPageState extends State<StationPage> {
           key: ValueKey(refreshKey),
           future: loadPatientSummaries(),
           builder: (context, snapshot) {
-            if (snapshot.hasError) {
+            if (snapshot.hasData) {
+              _lastSummaries = snapshot.data;
+            }
+
+            if (snapshot.hasError && _lastSummaries == null) {
               return Scaffold(
                 body: Center(
                   child: Text('오류: ${snapshot.error}'),
@@ -2453,7 +2462,8 @@ class _StationPageState extends State<StationPage> {
               );
             }
 
-            if (!snapshot.hasData) {
+            // 처음 열 때만 로딩을 보여준다. 갱신 중에는 이전 표를 그대로 둔다.
+            if (!snapshot.hasData && _lastSummaries == null) {
               return const Scaffold(
                 backgroundColor: Color(0xFFF5F7FA),
                 body: Center(
@@ -2462,7 +2472,7 @@ class _StationPageState extends State<StationPage> {
               );
             }
 
-            final summaries = snapshot.data!;
+            final summaries = snapshot.data ?? _lastSummaries!;
 
             return LayoutBuilder(
               builder: (context, constraints) {
