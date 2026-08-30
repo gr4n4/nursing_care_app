@@ -41,8 +41,8 @@
     ],
     "headers": [
       {
-        "//": "앱 코드 파일들은 이름에 해시가 없어서(main.dart.js 등) 오래 캐시하면 배포해도 옛 버전이 계속 돈다. no-cache는 '저장하지 말라'가 아니라 '쓰기 전에 서버에 확인하라'는 뜻이라, 안 바뀐 파일은 304로 끝나 비용도 거의 없다.",
-        "source": "/@(index.html|flutter_bootstrap.js|flutter.js|main.dart.js|flutter_service_worker.js|firebase-messaging-sw.js|manifest.json|version.json)",
+        "//": "앱 코드 파일들은 이름에 해시가 없어서(main.dart.js 등) 오래 캐시하면 배포해도 옛 버전이 계속 돈다. no-cache는 '저장하지 말라'가 아니라 '쓰기 전에 서버에 확인하라'는 뜻이라, 안 바뀐 파일은 304로 끝나 비용도 거의 없다. --wasm 빌드의 알맹이는 main.dart.js 가 아니라 main.dart.wasm/.mjs 다. 여기 빠져 있어서 한동안 배포해도 최대 1시간은 옛 코드가 돌았다.",
+        "source": "/@(index.html|flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.wasm|main.dart.mjs|flutter_service_worker.js|firebase-messaging-sw.js|manifest.json|version.json)",
         "headers": [
           {
             "key": "Cache-Control",

@@ -24,12 +24,17 @@ void main() async {
 
   // 로그인 유지. 웹 기본값도 이렇지만, 기본값에 기대면 나중에 조용히 바뀔 수 있어
   // 명시한다. 간호사들이 매번 로그인하지 않아도 되게 하는 것이 목적.
+  //
+  // 기다리지 않는다. 이미 기본값이 LOCAL 이라 이 호출은 사실상 확인 사살인데,
+  // await 하면 그동안 첫 화면이 뜨지 못한다.
   if (kIsWeb) {
-    try {
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-    } catch (e) {
-      debugPrint('로그인 유지 설정 실패: $e');
-    }
+    unawaited(
+      FirebaseAuth.instance.setPersistence(Persistence.LOCAL).catchError((
+        Object e,
+      ) {
+        debugPrint('로그인 유지 설정 실패: $e');
+      }),
+    );
   }
 
   // 읽은 데이터를 기기에 캐시한다.
@@ -174,25 +179,53 @@ class _AuthGateState extends State<AuthGate> {
       return const LoginPage();
     }
 
+    final userRef =
+        FirebaseFirestore.instance.collection('users').doc(email);
+
+    // 기기에 저장된 값을 먼저 본다.
+    //
+    // 그냥 get() 은 서버에 먼저 물어보고 실패해야 캐시를 쓴다. 그래서 앱을 열
+    // 때마다 이 한 번의 왕복을 다 기다린 뒤에야 첫 화면이 떴다. 병동 와이파이에서
+    // 그 대기가 그대로 '느림'으로 느껴진다.
+    //
+    // 여기서 읽는 것은 role 하나뿐이고 거의 바뀌지 않는다. 캐시로 먼저 그린 뒤
+    // 뒤에서 조용히 갱신하면, 바뀌더라도 다음 실행에는 맞는 화면으로 뜬다.
+    // 화면 선택만 캐시에 기대는 것이라 보안과는 무관하다 — 실제 데이터 접근은
+    // Firestore 보안 규칙이 서버에서 막는다.
+    DocumentSnapshot<Map<String, dynamic>>? userDoc;
+    try {
+      final cached = await userRef.get(const GetOptions(source: Source.cache));
+      if (cached.exists) {
+        userDoc = cached;
+        unawaited(() async {
+          try {
+            await userRef.get(const GetOptions(source: Source.server));
+          } catch (e) {
+            // 갱신은 실패해도 그만이다. 다음 실행에 다시 시도한다.
+            debugPrint('계정 정보 갱신 건너뜀: $e');
+          }
+        }());
+      }
+    } catch (_) {
+      // 캐시에 없는 첫 실행이면 아래에서 서버로 읽는다.
+    }
+
     // 권한 조회가 실패해도 로그아웃시키지 않는다.
     //
     // 전에는 실패하면 예외가 그대로 올라가 로딩 표시에서 멈췄고, 문서를 못 읽으면
     // 곧장 로그아웃시켰다. 병동 와이파이가 잠깐 끊긴 것뿐인데 다시 로그인해야 해서
     // 곤란하다. 네트워크 문제와 '권한이 정말 없는 경우'를 갈라서 처리한다.
-    final DocumentSnapshot<Map<String, dynamic>> userDoc;
-    try {
-      userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(email)
-          .get()
-          .timeout(const Duration(seconds: 20));
-    } catch (e) {
-      return _StartupErrorPage(
-        message: '연결이 원활하지 않아 계정 정보를 불러오지 못했습니다. '
-            '로그인은 유지되어 있으니 잠시 후 다시 시도해 주세요.',
-        detail: '$e',
-        onRetry: retryStartup,
-      );
+    if (userDoc == null) {
+      try {
+        userDoc = await userRef.get().timeout(const Duration(seconds: 20));
+      } catch (e) {
+        return _StartupErrorPage(
+          message: '연결이 원활하지 않아 계정 정보를 불러오지 못했습니다. '
+              '로그인은 유지되어 있으니 잠시 후 다시 시도해 주세요.',
+          detail: '$e',
+          onRetry: retryStartup,
+        );
+      }
     }
 
     if (!userDoc.exists) {
