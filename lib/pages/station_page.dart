@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../data/food_table.dart';
 import 'delivery_dispatch_page.dart';
 import '../utils/care_date.dart';
+import '../utils/delivery_watcher.dart';
 import '../theme/app_colors.dart';
 import '../widgets/notification_bell.dart';
 import '../utils/feedback.dart';
@@ -431,8 +432,29 @@ class _StationPageState extends State<StationPage> {
     if (mounted) refreshDashboard();
   }
 
+  /// 배차 화면 열기.
+  /// 옆 메뉴와 새 요청 알림의 '보기'가 같은 곳으로 가야 해서 한 곳에 둔다.
+  void openDispatch(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DeliveryDispatchPage()),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 새 물품 요청이 왔을 때 뜨는 알림의 '보기'가 갈 곳을 알려 준다.
+    // 알림을 띄우는 쪽은 화면 구조를 모르므로 여기서 넘겨준다.
+    DeliveryWatcher.onOpenRequested = () {
+      if (!mounted) return;
+      openDispatch(context);
+    };
+  }
+
   @override
   void dispose() {
+    DeliveryWatcher.onOpenRequested = null;
     horizontalController.dispose();
     verticalController.dispose();
     tableController.dispose();
@@ -749,6 +771,9 @@ class _StationPageState extends State<StationPage> {
     required String label,
     required bool selected,
     required VoidCallback onTap,
+    /// 0보다 크면 이름 옆에 빨간 동그라미로 붙는다.
+    /// 들어가 보지 않아도 처리할 것이 남았는지 알게 하려는 것.
+    int badge = 0,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
@@ -780,6 +805,25 @@ class _StationPageState extends State<StationPage> {
                     ),
                   ),
                 ),
+                if (badge > 0)
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 24),
+                    height: 24,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$badge',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -891,18 +935,17 @@ class _StationPageState extends State<StationPage> {
               ),
             // 병실 앱에서 올린 물품 요청을 받아 로봇을 보내는 화면.
             // 널스스테이션에서만 쓰므로 웹 대시보드 사이드바에 둔다.
-            sideMenuButton(
-              icon: Icons.smart_toy_rounded,
-              label: '로봇 배차',
-              selected: false,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DeliveryDispatchPage(),
-                  ),
-                );
-              },
+            // 아직 수락하지 않은 요청 수를 숫자로 붙인다. 이게 없으면 들어가
+            // 봐야만 요청이 온 걸 알 수 있어, 병실에서 올린 요청이 방치된다.
+            ValueListenableBuilder<int>(
+              valueListenable: DeliveryWatcher.pending,
+              builder: (context, waiting, _) => sideMenuButton(
+                icon: Icons.smart_toy_rounded,
+                label: '로봇 배차',
+                selected: false,
+                badge: waiting,
+                onTap: () => openDispatch(context),
+              ),
             ),
             sideMenuButton(
               icon: Icons.notifications_active_rounded,

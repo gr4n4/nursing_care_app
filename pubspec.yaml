@@ -89,6 +89,9 @@ flutter:
     - assets/icon/nrcarec_wordmark.png
     - assets/icon/nrcarec_wordmark_white.png
     - assets/sound/alert.wav
+    # 물품 요청 알림음. 낙상 경보음(alert.wav)과 반드시 달라야 한다 —
+    # 같은 소리면 간호사가 낙상인 줄 알고 뛰어간다.
+    - assets/sound/ding.wav
     - assets/icon/alert-fall.svg
     - assets/icon/alert-bedside.svg
 

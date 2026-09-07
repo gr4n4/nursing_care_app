@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
 import 'utils/alert_center.dart';
+import 'utils/delivery_watcher.dart';
 import 'utils/push_messaging.dart';
 import 'pages/login_page.dart';
 import 'pages/station_page.dart';
@@ -253,10 +254,13 @@ class _AuthGateState extends State<AuthGate> {
 
     // 좁은 화면(폰/홈화면 PWA)은 간호사 입력 앱, 넓은 화면(데스크톱)은 대시보드로.
     if (role == 'nurse') {
-      return wide ? const StationPage() : const NurseHomePage();
+      if (!wide) return const NurseHomePage();
+      DeliveryWatcher.start(CareNoteApp.navigatorKey);
+      return const StationPage();
     }
 
     if (role == 'admin') {
+      DeliveryWatcher.start(CareNoteApp.navigatorKey);
       return const StationPage();
     }
 
