@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/food_table.dart';
+import 'delivery_dispatch_page.dart';
 import '../utils/care_date.dart';
 import '../theme/app_colors.dart';
 import '../widgets/notification_bell.dart';
@@ -888,6 +889,21 @@ class _StationPageState extends State<StationPage> {
                   );
                 },
               ),
+            // 병실 앱에서 올린 물품 요청을 받아 로봇을 보내는 화면.
+            // 널스스테이션에서만 쓰므로 웹 대시보드 사이드바에 둔다.
+            sideMenuButton(
+              icon: Icons.smart_toy_rounded,
+              label: '로봇 배차',
+              selected: false,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DeliveryDispatchPage(),
+                  ),
+                );
+              },
+            ),
             sideMenuButton(
               icon: Icons.notifications_active_rounded,
               label: '알림 설정',

@@ -1,0 +1,426 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+
+import '../models/delivery_request.dart';
+import '../theme/app_colors.dart';
+
+/// 로봇 배차 (웹 · 널스스테이션).
+///
+/// 병실에서 앱으로 올린 요청이 여기 실시간으로 뜬다. 간호사는 순서대로
+/// [수락] → [물품 실었음·출발] → [수령 확인] 세 번만 누르면 되고, 그 사이
+/// 로봇이 움직이는 동안에는 버튼이 사라져 "지금은 기다리는 때"임을 보인다.
+///
+/// 로봇 쪽 상태(at_loading·delivered·closed)는 브릿지가 실제로 도착했을 때만
+/// 쓴다. 여기서는 만들지도 않고, Firestore 규칙에서도 막혀 있다.
+class DeliveryDispatchPage extends StatelessWidget {
+  const DeliveryDispatchPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.pageBg,
+      appBar: AppBar(
+        title: const Text('로봇 배차'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.ink,
+        elevation: 0,
+        surfaceTintColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          const _RobotStatusBar(),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              // orderBy 를 붙이면 복합 색인이 필요해 배포가 한 단계 늘어난다.
+              // 요청은 한 번에 많아야 수십 건이라 받아서 정렬해도 부담이 없다.
+              stream: FirebaseFirestore.instance
+                  .collection('delivery_requests')
+                  .snapshots(),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return _centerNote('목록을 불러오지 못했습니다.\n${snap.error}');
+                }
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final all = snap.data!.docs
+                    .map(DeliveryRequest.fromDoc)
+                    .toList();
+                final active = all.where((r) => r.isActive).toList()
+                  ..sort((a, b) => (a.createdAt ?? DateTime(2000))
+                      .compareTo(b.createdAt ?? DateTime(2000)));
+                final finished = all.where((r) => !r.isActive).toList()
+                  ..sort((a, b) => (b.createdAt ?? DateTime(2000))
+                      .compareTo(a.createdAt ?? DateTime(2000)));
+
+                if (active.isEmpty && finished.isEmpty) {
+                  return _centerNote('아직 들어온 요청이 없습니다.');
+                }
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
+                  children: [
+                    _header('처리할 요청', active.length),
+                    if (active.isEmpty)
+                      _emptyBox('처리할 요청이 없습니다.')
+                    else
+                      for (final r in active) _RequestCard(req: r),
+                    if (finished.isNotEmpty) ...[
+                      const SizedBox(height: 26),
+                      _header('지난 요청', finished.length),
+                      for (final r in finished.take(20))
+                        _RequestCard(req: r, dim: true),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _centerNote(String t) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Text(
+            t,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.inkDim, fontSize: 15),
+          ),
+        ),
+      );
+
+  static Widget _header(String t, int n) => Padding(
+        padding: const EdgeInsets.only(bottom: 10, top: 2),
+        child: Row(
+          children: [
+            Text(
+              t,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                color: AppColors.ink,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.brandSoft,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$n',
+                style: const TextStyle(
+                  color: AppColors.brand,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  static Widget _emptyBox(String t) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 30),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Text(
+          t,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.inkDim),
+        ),
+      );
+}
+
+/// 로봇이 살아 있는지, 지금 어디쯤인지.
+///
+/// 브릿지가 robot_state/current 한 문서만 갱신한다. 30cm 이상 움직였을 때만
+/// 쓰기 때문에 무료 한도를 거의 먹지 않는다.
+class _RobotStatusBar extends StatelessWidget {
+  const _RobotStatusBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('robot_state')
+          .doc('current')
+          .snapshots(),
+      builder: (context, snap) {
+        final d = snap.data?.data();
+        final online = d?['online'] == true;
+        final busy = d?['busy'] == true;
+        final pose = d?['pose'] as Map<String, dynamic>?;
+
+        final (Color bg, Color fg, String text) = switch ((online, busy)) {
+          (false, _) => (
+              AppColors.dangerBg,
+              AppColors.danger,
+              '로봇 연결 끊김 — 배차해도 움직이지 않습니다'
+            ),
+          (true, true) => (AppColors.warnBg, AppColors.warn, '로봇 이동 중'),
+          (true, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
+        };
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          color: bg,
+          child: Row(
+            children: [
+              Icon(
+                online ? Icons.smart_toy_rounded : Icons.cloud_off_rounded,
+                color: fg,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                text,
+                style: TextStyle(color: fg, fontWeight: FontWeight.w800),
+              ),
+              if (pose != null) ...[
+                const SizedBox(width: 12),
+                Text(
+                  '(${(pose['x'] as num?)?.toStringAsFixed(1) ?? '?'}, '
+                  '${(pose['y'] as num?)?.toStringAsFixed(1) ?? '?'})',
+                  style: TextStyle(color: fg.withValues(alpha: 0.75)),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RequestCard extends StatefulWidget {
+  final DeliveryRequest req;
+  final bool dim;
+
+  const _RequestCard({required this.req, this.dim = false});
+
+  @override
+  State<_RequestCard> createState() => _RequestCardState();
+}
+
+class _RequestCardState extends State<_RequestCard> {
+  bool _busy = false;
+
+  Future<void> _move(String next) async {
+    setState(() => _busy = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('delivery_requests')
+          .doc(widget.req.id)
+          .update({'status': next, '${next}At': FieldValue.serverTimestamp()});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('상태를 바꾸지 못했습니다: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 요청 시각. 병동에서는 "언제 들어왔나"가 핵심이라 초는 생략한다.
+  String _time(DateTime? dt) {
+    if (dt == null) return '';
+    final now = DateTime.now();
+    final hm = '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    if (isToday) return '오늘 $hm';
+    return '${dt.month.toString().padLeft(2, '0')}.'
+        '${dt.day.toString().padLeft(2, '0')} $hm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.req;
+    final action = DeliveryStatus.nextAction(r.status);
+    final failed = r.status == DeliveryStatus.failed;
+
+    return Opacity(
+      opacity: widget.dim ? 0.62 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: failed ? AppColors.danger : AppColors.line,
+            width: failed ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.brandSoft,
+                  child: Text(
+                    r.room.isEmpty ? '-' : r.room,
+                    style: const TextStyle(
+                      color: AppColors.brand,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        r.itemsText,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _time(r.createdAt),
+                        style: const TextStyle(
+                          color: AppColors.inkDim,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _statusChip(r.status),
+              ],
+            ),
+            if (r.note.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  '메모: ${r.note}',
+                  style: const TextStyle(color: AppColors.inkMid),
+                ),
+              ),
+            if (failed && r.failReason.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  '실패 사유: ${r.failReason}',
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+              ),
+            if (action != null) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: _busy ? null : () => _move(action.next),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.brand,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Text(
+                          _busy ? '처리 중…' : action.label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _move(DeliveryStatus.canceled),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.inkDim,
+                        side: const BorderSide(color: AppColors.line),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('취소'),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (r.isActive) ...[
+              // 로봇이 움직이는 중. 눌러 봐야 아무 일도 없으니 버튼 대신
+              // 무엇을 기다리는지 적어 둔다.
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _waitingText(r.status),
+                    style: const TextStyle(color: AppColors.inkMid),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _waitingText(String s) => switch (s) {
+        DeliveryStatus.accepted => '로봇이 널스스테이션으로 오는 중입니다',
+        DeliveryStatus.delivering => '로봇이 병실로 가는 중입니다',
+        DeliveryStatus.done => '로봇이 대기 자리로 돌아가는 중입니다',
+        _ => '로봇이 움직이는 중입니다',
+      };
+
+  Widget _statusChip(String s) {
+    final (Color bg, Color fg) = switch (s) {
+      DeliveryStatus.requested => (AppColors.warnBg, AppColors.warn),
+      DeliveryStatus.delivered => (AppColors.okBg, AppColors.ok),
+      DeliveryStatus.closed => (AppColors.okBg, AppColors.ok),
+      DeliveryStatus.failed => (AppColors.dangerBg, AppColors.danger),
+      DeliveryStatus.canceled => (AppColors.pageBg, AppColors.inkDim),
+      _ => (AppColors.brandSoft, AppColors.brand),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(
+        DeliveryStatus.label(s),
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w800,
+          fontSize: 12.5,
+        ),
+      ),
+    );
+  }
+}

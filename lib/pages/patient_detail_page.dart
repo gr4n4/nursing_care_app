@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/patient.dart';
+import 'delivery_request_page.dart';
 import 'io_balance_page.dart';
 import 'patient_profile_edit_page.dart';
 
@@ -146,6 +147,30 @@ class PatientDetailPage extends StatelessWidget {
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('배설량 기록 화면은 다음 단계에서 추가합니다.')),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            // 물품 요청. 이 화면에서 들어가면 환자의 호실이 이미 채워지므로
+            // 간호사가 호실을 손으로 칠 일이 없다(오타·착오 방지).
+            _menuButton(
+              context: context,
+              title: '물품 요청',
+              subtitle: patient.room.isEmpty
+                  ? '호실 정보가 없어 직접 골라야 합니다'
+                  : '${patient.room}호로 로봇이 배송합니다',
+              icon: Icons.local_shipping_rounded,
+              color: const Color(0xFF0F766E),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeliveryRequestPage(
+                      presetRoom:
+                          patient.room.isEmpty ? null : patient.room,
+                      patientName: patient.name,
+                    ),
+                  ),
                 );
               },
             ),

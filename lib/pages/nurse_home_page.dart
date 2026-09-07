@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../utils/care_date.dart';
 import '../widgets/notification_bell.dart';
+import 'delivery_request_page.dart';
 import 'input_choice_page.dart';
 import 'login_page.dart';
 import 'nurse_profile_edit_page.dart';
@@ -1132,6 +1133,24 @@ class _NurseHomePageState extends State<NurseHomePage> {
 
         return Scaffold(
           backgroundColor: pageBg,
+          // 환자와 무관한 물품 요청(처치실 거즈 등)을 위한 진입점.
+          // 환자별 요청은 환자 상세에서 하는 편이 호실이 자동으로 채워져 빠르다.
+          floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'delivery_request_fab',
+            backgroundColor: mintDark,
+            foregroundColor: Colors.white,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DeliveryRequestPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.local_shipping_rounded),
+            label: const Text('물품 요청',
+                style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
           body: SafeArea(
             bottom: false,
             child: LayoutBuilder(

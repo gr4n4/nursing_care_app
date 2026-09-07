@@ -83,6 +83,28 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 물품 배송 요청. 앱에서 만들고, 널스스테이션 화면에서 진행시킨다.
+    // 로봇(브릿지)은 서비스 계정으로 접근하므로 이 규칙을 거치지 않는다.
+    match /delivery_requests/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.status in ['requested', 'accepted'];
+      // 사람이 바꿀 수 있는 상태만 연다. at_loading/delivered/closed 는
+      // 로봇이 실제로 도착했을 때만 찍혀야 하는 값이라, 사람이 쓰면
+      // 가지도 않은 로봇이 도착한 것처럼 보이게 된다.
+      allow update: if signedIn()
+        && request.resource.data.status in
+             ['accepted', 'delivering', 'done', 'canceled'];
+      allow delete: if isAdmin();
+    }
+
+    // 로봇 상태(위치·온라인 여부). 화면은 읽기만 한다.
+    // 쓰는 쪽은 로봇뿐이고, 로봇은 서비스 계정이라 규칙을 안 거친다.
+    match /robot_state/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // 위에 명시하지 않은 경로는 전부 차단한다.
     match /{document=**} {
       allow read, write: if false;
