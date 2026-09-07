@@ -31,10 +31,19 @@ class DeliveryDispatchPage extends StatelessWidget {
           const _RobotStatusBar(),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              // orderBy 를 붙이면 복합 색인이 필요해 배포가 한 단계 늘어난다.
-              // 요청은 한 번에 많아야 수십 건이라 받아서 정렬해도 부담이 없다.
+              // 최근 것만 가져온다.
+              //
+              // 처리 중인 요청은 몇 건 안 되지만 끝난 요청은 계속 쌓인다.
+              // 전부 받으면 화면을 열 때마다 그 전부를 읽어, 하루 20건씩만
+              // 쌓여도 반 년 뒤에는 한 번 열 때 수천 건을 읽는다. 무료 한도가
+              // 읽기 횟수로 걸려 있어 그대로 두면 언젠가 막힌다.
+              //
+              // 한 필드만 정렬하는 것은 복합 색인이 필요 없다(자동 색인으로
+              // 처리된다). 색인을 따로 만들 필요 없이 그대로 쓸 수 있다.
               stream: FirebaseFirestore.instance
                   .collection('delivery_requests')
+                  .orderBy('createdAt', descending: true)
+                  .limit(60)
                   .snapshots(),
               builder: (context, snap) {
                 if (snap.hasError) {
@@ -158,14 +167,24 @@ class _RobotStatusBar extends StatelessWidget {
         final busy = d?['busy'] == true;
         final pose = d?['pose'] as Map<String, dynamic>?;
 
-        final (Color bg, Color fg, String text) = switch ((online, busy)) {
-          (false, _) => (
+        // 첫 응답이 오기 전에는 아직 모르는 것이지 끊긴 것이 아니다.
+        // 그 짧은 사이에 빨간 '연결 끊김'이 번쩍이면 멀쩡한 로봇도 고장난
+        // 것처럼 보인다.
+        final unknown = !snap.hasData;
+
+        final (Color bg, Color fg, String text) = switch ((
+          unknown,
+          online,
+          busy,
+        )) {
+          (true, _, _) => (AppColors.pageBg, AppColors.inkDim, '로봇 상태 확인 중…'),
+          (_, false, _) => (
               AppColors.dangerBg,
               AppColors.danger,
               '로봇 연결 끊김 — 배차해도 움직이지 않습니다'
             ),
-          (true, true) => (AppColors.warnBg, AppColors.warn, '로봇 이동 중'),
-          (true, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
+          (_, true, true) => (AppColors.warnBg, AppColors.warn, '로봇 이동 중'),
+          (_, true, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
         };
 
         return Container(
@@ -175,7 +194,11 @@ class _RobotStatusBar extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                online ? Icons.smart_toy_rounded : Icons.cloud_off_rounded,
+                unknown
+                    ? Icons.hourglass_empty_rounded
+                    : online
+                        ? Icons.smart_toy_rounded
+                        : Icons.cloud_off_rounded,
                 color: fg,
                 size: 20,
               ),

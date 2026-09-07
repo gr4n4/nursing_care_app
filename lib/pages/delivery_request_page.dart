@@ -46,6 +46,14 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
   bool _loadingItems = true;
   String? _room;
   List<String> _rooms = [];
+
+  /// 호실 목록을 아직 읽는 중인가.
+  ///
+  /// 이게 없으면 목록이 도착하기 전에는 '비어 있음'으로 보여 직접 입력 칸이
+  /// 떴다가, 도착하는 순간 호실 단추로 바뀐다. 치고 있던 글자가 사라진 것처럼
+  /// 보이므로 다 읽을 때까지 기다린다.
+  bool _loadingRooms = false;
+
   bool _sending = false;
 
   @override
@@ -53,7 +61,10 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     super.initState();
     _room = widget.presetRoom;
     _loadItems();
-    if (widget.presetRoom == null) _loadRooms();
+    if (widget.presetRoom == null) {
+      _loadingRooms = true;
+      _loadRooms();
+    }
   }
 
   @override
@@ -95,7 +106,11 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           .toList()
         ..sort();
       if (mounted) setState(() => _rooms = rooms);
-    } catch (_) {/* 목록을 못 얻어도 직접 입력으로 요청할 수 있다 */}
+    } catch (_) {
+      // 목록을 못 얻어도 직접 입력으로 요청할 수 있다.
+    } finally {
+      if (mounted) setState(() => _loadingRooms = false);
+    }
   }
 
   bool get _canSend =>
@@ -258,7 +273,16 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
           const SizedBox(height: 12),
-          if (_rooms.isEmpty)
+          if (_loadingRooms)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else if (_rooms.isEmpty)
             TextField(
               decoration: const InputDecoration(
                 hintText: '호실 입력 (예: 421)',
