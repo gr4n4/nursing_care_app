@@ -26,16 +26,18 @@ void main() async {
   // 로그인 유지. 웹 기본값도 이렇지만, 기본값에 기대면 나중에 조용히 바뀔 수 있어
   // 명시한다. 간호사들이 매번 로그인하지 않아도 되게 하는 것이 목적.
   //
-  // 기다리지 않는다. 이미 기본값이 LOCAL 이라 이 호출은 사실상 확인 사살인데,
-  // await 하면 그동안 첫 화면이 뜨지 못한다.
+  // 기다린다. 네트워크를 타지 않는 로컬 설정이라 사실상 시간이 들지 않는다.
+  //
+  // 한때 시작을 앞당기려고 기다리지 않게 바꿨는데, 로그인 상태를 복원하는
+  // 중에 저장 방식을 바꾸는 셈이라 경합이 생길 수 있다. 아낄 수 있는 시간은
+  // 밀리초 단위인 반면 로그인이 풀리면 알림 기기 등록까지 함께 날아간다.
+  // 바꿀 이유가 없다.
   if (kIsWeb) {
-    unawaited(
-      FirebaseAuth.instance.setPersistence(Persistence.LOCAL).catchError((
-        Object e,
-      ) {
-        debugPrint('로그인 유지 설정 실패: $e');
-      }),
-    );
+    try {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    } catch (e) {
+      debugPrint('로그인 유지 설정 실패: $e');
+    }
   }
 
   // 읽은 데이터를 기기에 캐시한다.
@@ -229,7 +231,24 @@ class _AuthGateState extends State<AuthGate> {
       }
     }
 
+    // '문서가 없다'는 답이 캐시에서 나온 것이면 로그아웃시키지 않는다.
+    //
+    // get() 은 서버에 닿지 못하면 예외를 던지지 않고 조용히 캐시로 물러난다.
+    // 그 캐시에 이 문서가 없으면 '권한 없음'과 똑같은 모습(exists == false)이
+    // 된다. 둘은 전혀 다르다 — 앞은 아직 못 읽은 것이고 뒤는 정말 없는 것이다.
+    //
+    // 이걸 구분하지 않아서, 병동 와이파이가 잠깐 끊기거나 브라우저가 저장소를
+    // 비운 것만으로 간호사가 로그아웃됐다. 로그아웃되면 알림 기기 등록도 함께
+    // 풀려서 누락 알림까지 끊긴다. 서버가 분명히 '없다'고 답했을 때만 내보낸다.
     if (!userDoc.exists) {
+      if (userDoc.metadata.isFromCache) {
+        return _StartupErrorPage(
+          message: '연결이 원활하지 않아 계정 정보를 확인하지 못했습니다. '
+              '로그인은 유지되어 있으니 잠시 후 다시 시도해 주세요.',
+          detail: '계정 문서를 서버에서 읽지 못했습니다(캐시 응답).',
+          onRetry: retryStartup,
+        );
+      }
       await FirebaseAuth.instance.signOut();
       return const LoginPage();
     }

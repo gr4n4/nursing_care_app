@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../app_version.dart';
 import '../data/food_table.dart';
 import 'delivery_dispatch_page.dart';
 import '../utils/care_date.dart';
@@ -1002,6 +1003,20 @@ class _StationPageState extends State<StationPage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+            // 어느 버전이 돌고 있는지. 병동에서 오류 제보를 받았을 때
+            // 이 값을 물어보면 어느 시점의 코드인지 바로 좁혀진다.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                'NRCarec v$appVersion',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF94A3B8),
                 ),
               ),
             ),
