@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../app_version.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -424,6 +426,20 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
                     platformGuide(MediaQuery.of(context).size.width >= 900),
+                    const SizedBox(height: 14),
+                    // 병동에서 "몇 버전 쓰세요?"를 물어볼 수 있게 적어 둔다.
+                    // 로그인 전에도 보여야 해서 여기에 둔다 — 로그인이 안 되는
+                    // 상황을 물어볼 때가 오히려 버전이 궁금한 때다.
+                    Center(
+                      child: Text(
+                        'v$appVersion',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
