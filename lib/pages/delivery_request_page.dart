@@ -163,7 +163,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
       // 못 읽으면 비상용 목록으로 간다. 요청 자체를 막지는 않는다.
     }
     final known = fromRobot != null && fromRobot.isNotEmpty;
-    final list = (known ? fromRobot! : [..._fallbackRooms])..sort();
+    final list = (known ? fromRobot : [..._fallbackRooms])..sort();
     if (mounted) {
       setState(() {
         _rooms = list;
