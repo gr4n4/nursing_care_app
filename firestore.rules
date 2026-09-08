@@ -92,9 +92,16 @@ service cloud.firestore {
       // 사람이 바꿀 수 있는 상태만 연다. at_loading/delivered/closed 는
       // 로봇이 실제로 도착했을 때만 찍혀야 하는 값이라, 사람이 쓰면
       // 가지도 않은 로봇이 도착한 것처럼 보이게 된다.
-      allow update: if signedIn()
-        && request.resource.data.status in
-             ['accepted', 'delivering', 'done', 'canceled'];
+      //
+      // 단, 상태를 그대로 두고 다른 것만 고치는 것은 언제나 열어 둔다.
+      // '잠깐 멈춤'(paused)이 그렇다 — 어디까지 갔는지를 바꾸지 않아야
+      // 다시 보낼 때 하던 일을 이어서 한다. 이 예외가 없으면 로봇이 찍어 둔
+      // 상태(at_loading 등)일 때는 멈춰 세울 수조차 없다.
+      allow update: if signedIn() && (
+        request.resource.data.status == resource.data.status
+        || request.resource.data.status in
+             ['accepted', 'delivering', 'done', 'canceled']
+      );
       allow delete: if isAdmin();
     }
 

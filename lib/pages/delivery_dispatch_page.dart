@@ -256,6 +256,68 @@ class _RequestCardState extends State<_RequestCard> {
     }
   }
 
+  /// 잠깐 멈춤 / 다시 보내기.
+  ///
+  /// 상태는 그대로 두고 paused 만 바꾼다. 어디까지 갔는지를 지우지 않아야
+  /// 다시 보낼 때 하던 일을 이어서 할 수 있다.
+  Future<void> _setPaused(bool value) async {
+    setState(() => _busy = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('delivery_requests')
+          .doc(widget.req.id)
+          .update({
+        'paused': value,
+        'pausedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('로봇을 멈추지 못했습니다: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 이동 중 취소는 한 번 더 묻는다.
+  /// 로봇이 이미 나가 있어서, 잘못 누르면 물품이 가지 않는다.
+  Future<void> _confirmCancel(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          '배송을 취소할까요?',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        content: Text(
+          '${widget.req.room.isEmpty ? '' : '${widget.req.room} · '}'
+          '${widget.req.itemsText}\n\n'
+          '로봇이 가던 것을 멈추고 대기 자리로 돌아갑니다.',
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('아니요'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('취소합니다'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _move(DeliveryStatus.canceled);
+  }
+
   /// 요청 시각. 병동에서는 "언제 들어왔나"가 핵심이라 초는 생략한다.
   String _time(DateTime? dt) {
     if (dt == null) return '';
@@ -392,23 +454,94 @@ class _RequestCardState extends State<_RequestCard> {
                 ],
               ),
             ] else if (r.isActive) ...[
-              // 로봇이 움직이는 중. 눌러 봐야 아무 일도 없으니 버튼 대신
-              // 무엇을 기다리는지 적어 둔다.
+              // 로봇이 움직이는 중. 다음 단계를 넘기는 버튼은 뜻이 없지만,
+              // 멈춰 세우거나 무르는 것은 이때가 오히려 필요하다
+              // (환자가 자리를 비웠거나, 잘못 보냈거나, 길을 막고 있거나).
               const SizedBox(height: 14),
               Row(
                 children: [
-                  const SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  if (r.paused)
+                    const Icon(
+                      Icons.pause_circle_filled_rounded,
+                      size: 18,
+                      color: AppColors.warn,
+                    )
+                  else
+                    const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   const SizedBox(width: 10),
-                  Text(
-                    _waitingText(r.status),
-                    style: const TextStyle(color: AppColors.inkMid),
+                  Expanded(
+                    child: Text(
+                      r.paused ? '멈춰 세웠습니다 · 다시 보낼 수 있습니다' : _waitingText(r.status),
+                      style: TextStyle(
+                        color: r.paused ? AppColors.warn : AppColors.inkMid,
+                        fontWeight:
+                            r.paused ? FontWeight.w800 : FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ],
               ),
+              if (r.isMoving) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _busy ? null : () => _setPaused(!r.paused),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor:
+                                r.paused ? AppColors.brand : AppColors.warn,
+                            side: BorderSide(
+                              color:
+                                  r.paused ? AppColors.brand : AppColors.warn,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: Icon(
+                            r.paused
+                                ? Icons.play_arrow_rounded
+                                : Icons.pause_rounded,
+                            size: 20,
+                          ),
+                          label: Text(
+                            r.paused ? '다시 보내기' : '잠깐 멈춤',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _confirmCancel(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.danger,
+                          side: const BorderSide(color: AppColors.danger),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          '배송 취소',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ],
         ),

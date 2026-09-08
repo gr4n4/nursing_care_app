@@ -15,10 +15,11 @@ import '../models/delivery_request.dart';
 ///
 /// 두 가지로 알린다.
 ///  - 옆 메뉴 '로봇 배차'에 밀린 건수를 숫자로 붙인다(늘 보임)
-///  - 새로 들어온 순간 화면 아래에 한 줄과 소리(늘 보고 있지 않아도 알아챔)
+///  - 새로 들어온 순간 팝업과 소리(늘 보고 있지 않아도 알아챔)
 ///
-/// 낙상 경보와 달리 화면을 막지 않는다. 물품 요청은 급하지만 위급하지는
-/// 않아서, 하던 기록을 끊고 확인을 강요할 일이 아니다.
+/// 처음에는 화면 아래 한 줄로 스쳐 가게 했는데, 잠깐 지나가는 것이라 놓치기
+/// 쉬웠다. 지금은 낙상 경보처럼 창을 띄우되 그만큼 다그치지는 않는다 —
+/// 소리는 한 번만 나고 '나중에'로 닫을 수 있다. 위급한 것과 급한 것은 다르다.
 class DeliveryWatcher {
   DeliveryWatcher._();
 
@@ -82,6 +83,9 @@ class DeliveryWatcher {
     pending.value = 0;
   }
 
+  /// 팝업이 이미 떠 있는가. 요청이 잇달아 오면 창이 겹쳐 쌓인다.
+  static bool _dialogOpen = false;
+
   static void _announce(
     GlobalKey<NavigatorState> navigatorKey,
     List<DeliveryRequest> fresh,
@@ -90,52 +94,17 @@ class DeliveryWatcher {
 
     final context = navigatorKey.currentContext;
     if (context == null) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
 
-    final first = fresh.first;
-    final more = fresh.length - 1;
-    final where = first.room.isEmpty ? '' : '${first.room} · ';
-    final text = more > 0
-        ? '$where${first.itemsText} 외 $more건 요청이 들어왔습니다.'
-        : '$where${first.itemsText} 요청이 들어왔습니다.';
+    // 이미 떠 있으면 새로 띄우지 않는다. 어차피 들어가면 다 보이고,
+    // 옆 메뉴 숫자에도 이미 반영돼 있다.
+    if (_dialogOpen) return;
+    _dialogOpen = true;
 
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        backgroundColor: const Color(0xFF16305E),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        content: Row(
-          children: [
-            const Icon(
-              Icons.local_shipping_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-        action: SnackBarAction(
-          label: '보기',
-          textColor: const Color(0xFFDCE7F5),
-          onPressed: () => onOpenRequested?.call(),
-        ),
-      ),
-    );
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _RequestDialog(fresh: fresh),
+    ).whenComplete(() => _dialogOpen = false);
   }
 
   /// '보기'를 눌렀을 때 배차 화면으로 보내는 방법.
@@ -164,5 +133,168 @@ class DeliveryWatcher {
     } catch (e) {
       debugPrint('물품 요청 알림음 준비 실패: $e');
     }
+  }
+}
+
+/// 새 물품 요청 팝업.
+///
+/// 낙상 경보와 일부러 다르게 만들었다. 낙상은 빨간 화면에 소리가 계속 울리고
+/// 확인 말고는 길이 없다. 물품 요청은 급하지만 위급하지는 않아서, 소리는 한 번만
+/// 나고 '나중에'로 닫을 수 있다. 다만 저절로 사라지지는 않는다 — 아래에서
+/// 잠깐 스쳐 지나가면 놓치기 때문이다.
+class _RequestDialog extends StatelessWidget {
+  final List<DeliveryRequest> fresh;
+
+  const _RequestDialog({required this.fresh});
+
+  static const Color brand = Color(0xFF16305E);
+  static const Color brandSoft = Color(0xFFDCE7F5);
+  static const Color textDark = Color(0xFF0F172A);
+  static const Color textGrey = Color(0xFF64748B);
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(26, 26, 26, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: brandSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.local_shipping_rounded,
+                      color: brand,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      fresh.length > 1
+                          ? '새 물품 요청 ${fresh.length}건'
+                          : '새 물품 요청',
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                        color: textDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // 한 번에 여러 건이 와도 무엇이 왔는지는 다 보여야 한다.
+              // 다만 창이 화면을 넘지 않게 다섯 건까지만 적는다.
+              for (final r in fresh.take(5))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: brandSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          r.room.isEmpty ? '위치 미정' : r.room,
+                          style: const TextStyle(
+                            color: brand,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          r.itemsText,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (fresh.length > 5)
+                Text(
+                  '외 ${fresh.length - 5}건',
+                  style: const TextStyle(color: textGrey, fontSize: 14),
+                ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textGrey,
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          '나중에',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: SizedBox(
+                      height: 50,
+                      child: FilledButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          DeliveryWatcher.onOpenRequested?.call();
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: brand,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          '배차 화면으로',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -78,6 +78,15 @@ class DeliveryRequest {
 
   final String failReason;
 
+  /// 잠깐 멈춰 달라는 표시.
+  ///
+  /// 상태와 따로 두는 이유: 멈춤은 어디까지 갔는지를 바꾸지 않는다. 병실로
+  /// 가던 중에 멈췄다가 다시 보내면 하던 일을 이어서 해야지, 처음부터 다시
+  /// 하면 안 된다. 상태로 표현하면 그 '어디까지 갔는지'가 지워진다.
+  ///
+  /// 로봇 쪽 브릿지가 이 값을 보고 멈추고 다시 간다.
+  final bool paused;
+
   const DeliveryRequest({
     required this.id,
     required this.room,
@@ -87,6 +96,7 @@ class DeliveryRequest {
     this.createdAt,
     this.createdBy = '',
     this.failReason = '',
+    this.paused = false,
   });
 
   factory DeliveryRequest.fromDoc(
@@ -105,8 +115,15 @@ class DeliveryRequest {
       createdAt: _parseTime(d['createdAt']),
       createdBy: (d['createdBy'] ?? '').toString(),
       failReason: (d['failReason'] ?? '').toString(),
+      paused: d['paused'] == true,
     );
   }
+
+  /// 로봇이 지금 움직이고 있어야 하는 상태인가.
+  /// 이때만 '일시정지'와 '취소'가 뜻을 갖는다. 복귀 중(done)은 뺀다 —
+  /// 물품은 이미 전달됐고, 돌아가는 것을 멈춰 세울 이유가 없다.
+  bool get isMoving =>
+      status == DeliveryStatus.accepted || status == DeliveryStatus.delivering;
 
   /// 브릿지는 ISO 8601 문자열로, 앱은 Timestamp 로 쓴다. 둘 다 받는다.
   static DateTime? _parseTime(dynamic v) {

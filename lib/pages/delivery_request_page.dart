@@ -538,33 +538,38 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
               ),
             ),
           ),
-          _qtyButton(
-            icon: Icons.remove_rounded,
-            enabled: qty > 0,
-            onTap: () => setState(() {
-              final v = qty - 1;
-              if (v <= 0) {
-                _picked.remove(name);
-              } else {
-                _picked[name] = v;
-              }
-            }),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              '$qty',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: on ? mintDark : const Color(0xFFCBD5E1),
+          // 고르지 않은 줄에는 −와 숫자를 아예 두지 않는다.
+          //
+          // 처음에는 흐리게만 해 뒀는데, 눌러지지도 않는 빈 네모가 품목마다
+          // 하나씩 늘어서서 무엇을 골랐는지 되레 알아보기 어려웠다.
+          // 0에서 뺄 것이 없으니 단추도 없는 편이 솔직하다.
+          if (on) ...[
+            _qtyButton(
+              icon: Icons.remove_rounded,
+              onTap: () => setState(() {
+                final v = qty - 1;
+                if (v <= 0) {
+                  _picked.remove(name);
+                } else {
+                  _picked[name] = v;
+                }
+              }),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text(
+                '$qty',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: mintDark,
+                ),
               ),
             ),
-          ),
+          ],
           _qtyButton(
             icon: Icons.add_rounded,
-            enabled: true,
             onTap: () => setState(() => _picked[name] = qty + 1),
           ),
         ],
@@ -574,26 +579,21 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
 
   Widget _qtyButton({
     required IconData icon,
-    required bool enabled,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: enabled ? onTap : null,
+      onTap: onTap,
       child: Container(
         width: 42,
         height: 42,
+        // 크기를 정한 상자에 그림을 넣을 때는 가운데로 놓으라고 일러 줘야 한다.
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: enabled ? mintSoft : fieldBg,
+          color: mintSoft,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: enabled ? const Color(0xFFC3D5EE) : borderGrey,
-          ),
+          border: Border.all(color: const Color(0xFFC3D5EE)),
         ),
-        child: Icon(
-          icon,
-          size: 22,
-          color: enabled ? mintDark : const Color(0xFFCBD5E1),
-        ),
+        child: Icon(icon, size: 24, color: mintDark),
       ),
     );
   }
