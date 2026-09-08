@@ -545,7 +545,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           // 0에서 뺄 것이 없으니 단추도 없는 편이 솔직하다.
           if (on) ...[
             _qtyButton(
-              icon: Icons.remove_rounded,
+              plus: false,
               onTap: () => setState(() {
                 final v = qty - 1;
                 if (v <= 0) {
@@ -569,7 +569,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
             ),
           ],
           _qtyButton(
-            icon: Icons.add_rounded,
+            plus: true,
             onTap: () => setState(() => _picked[name] = qty + 1),
           ),
         ],
@@ -577,10 +577,24 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     );
   }
 
-  Widget _qtyButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
+  /// 수량 −/+ 단추.
+  ///
+  /// 아이콘 글꼴을 쓰지 않고 막대를 직접 그린다. 웹 빌드에서 빼기 아이콘만
+  /// 자리는 잡히는데 그림이 나오지 않았다(더하기는 멀쩡했다). 글꼴에 기대지
+  /// 않으면 어느 브라우저에서도 같은 모양이 나온다.
+  Widget _qtyButton({required bool plus, required VoidCallback onTap}) {
+    const double bar = 2.6;
+    const double len = 17;
+
+    Widget stroke({required double w, required double h}) => Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            color: mintDark,
+            borderRadius: BorderRadius.circular(bar),
+          ),
+        );
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -593,7 +607,13 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFC3D5EE)),
         ),
-        child: Icon(icon, size: 24, color: mintDark),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            stroke(w: len, h: bar),
+            if (plus) stroke(w: bar, h: len),
+          ],
+        ),
       ),
     );
   }

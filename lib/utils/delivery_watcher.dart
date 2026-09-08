@@ -152,6 +152,14 @@ class _RequestDialog extends StatelessWidget {
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
 
+  /// '428호'처럼 읽히게 다듬는다.
+  /// 저장된 값이 '신관 428'이기도 하고 그냥 '425'이기도 해서 양쪽을 받는다.
+  static String _roomLabel(String room) {
+    final t = room.trim();
+    if (t.isEmpty) return '위치 미정인 곳';
+    return t.endsWith('호') ? t : '$t호';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -200,40 +208,31 @@ class _RequestDialog extends StatelessWidget {
               // 다만 창이 화면을 넘지 않게 다섯 건까지만 적는다.
               for (final r in fresh.take(5))
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: brandSoft,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          r.room.isEmpty ? '위치 미정' : r.room,
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.45,
+                        color: textDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: _roomLabel(r.room),
                           style: const TextStyle(
                             color: brand,
                             fontWeight: FontWeight.w900,
-                            fontSize: 13,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          r.itemsText,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: textDark,
-                          ),
+                        const TextSpan(text: '에서 '),
+                        TextSpan(
+                          text: r.itemsText,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
-                      ),
-                    ],
+                        const TextSpan(text: ' 물품 요청이 있습니다.'),
+                      ],
+                    ),
                   ),
                 ),
               if (fresh.length > 5)

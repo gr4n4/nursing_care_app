@@ -341,7 +341,7 @@ class _RequestCardState extends State<_RequestCard> {
       opacity: widget.dim ? 0.62 : 1,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
@@ -353,19 +353,15 @@ class _RequestCardState extends State<_RequestCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 한 줄에 다 담는다.
+            //
+            // 전에는 무엇을 요청했는지가 위에 작게 있고 그 아래 '수락'이 화면
+            // 폭만큼 깔려 있었다. 눈이 먼저 가는 것이 단추라, 정작 무엇을
+            // 보내야 하는지가 안 보였다. 읽을 것을 왼쪽에 크게 두고 단추는
+            // 필요한 만큼만 오른쪽에 붙인다.
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.brandSoft,
-                  child: Text(
-                    r.room.isEmpty ? '-' : r.room,
-                    style: const TextStyle(
-                      color: AppColors.brand,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
+                _roomBadge(r.room),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -374,187 +370,211 @@ class _RequestCardState extends State<_RequestCard> {
                       Text(
                         r.itemsText,
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
                           color: AppColors.ink,
+                          height: 1.25,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _time(r.createdAt),
-                        style: const TextStyle(
-                          color: AppColors.inkDim,
-                          fontSize: 13,
-                        ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            _time(r.createdAt),
+                            style: const TextStyle(
+                              color: AppColors.inkDim,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _statusChip(r.status),
+                          // 멈춰 세운 것은 상태와 따로 표시한다. 상태는
+                          // 어디까지 갔는지를, 이것은 지금 가고 있는지를 말한다.
+                          if (r.paused) ...[
+                            const SizedBox(width: 6),
+                            _pill('멈춤', AppColors.warnBg, AppColors.warn),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
-                _statusChip(r.status),
+                const SizedBox(width: 14),
+                _actions(context, r, action),
               ],
             ),
             if (r.note.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 12, left: 62),
                 child: Text(
                   '메모: ${r.note}',
-                  style: const TextStyle(color: AppColors.inkMid),
+                  style: const TextStyle(
+                    color: AppColors.inkMid,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             if (failed && r.failReason.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 12, left: 62),
                 child: Text(
                   '실패 사유: ${r.failReason}',
-                  style: const TextStyle(color: AppColors.danger),
+                  style: const TextStyle(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            if (action != null) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: _busy ? null : () => _move(action.next),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.brand,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          _busy ? '처리 중…' : action.label,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 48,
-                    child: OutlinedButton(
-                      onPressed: _busy
-                          ? null
-                          : () => _move(DeliveryStatus.canceled),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.inkDim,
-                        side: const BorderSide(color: AppColors.line),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text('취소'),
-                    ),
-                  ),
-                ],
-              ),
-            ] else if (r.isActive) ...[
-              // 로봇이 움직이는 중. 다음 단계를 넘기는 버튼은 뜻이 없지만,
-              // 멈춰 세우거나 무르는 것은 이때가 오히려 필요하다
-              // (환자가 자리를 비웠거나, 잘못 보냈거나, 길을 막고 있거나).
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  if (r.paused)
-                    const Icon(
-                      Icons.pause_circle_filled_rounded,
-                      size: 18,
-                      color: AppColors.warn,
-                    )
-                  else
-                    const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      r.paused ? '멈춰 세웠습니다 · 다시 보낼 수 있습니다' : _waitingText(r.status),
-                      style: TextStyle(
-                        color: r.paused ? AppColors.warn : AppColors.inkMid,
-                        fontWeight:
-                            r.paused ? FontWeight.w800 : FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (r.isMoving) ...[
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 44,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _busy ? null : () => _setPaused(!r.paused),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                r.paused ? AppColors.brand : AppColors.warn,
-                            side: BorderSide(
-                              color:
-                                  r.paused ? AppColors.brand : AppColors.warn,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          icon: Icon(
-                            r.paused
-                                ? Icons.play_arrow_rounded
-                                : Icons.pause_rounded,
-                            size: 20,
-                          ),
-                          label: Text(
-                            r.paused ? '다시 보내기' : '잠깐 멈춤',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      height: 44,
-                      child: OutlinedButton(
-                        onPressed: _busy
-                            ? null
-                            : () => _confirmCancel(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.danger,
-                          side: const BorderSide(color: AppColors.danger),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Text(
-                          '배송 취소',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
           ],
         ),
       ),
     );
   }
 
-  String _waitingText(String s) => switch (s) {
-        DeliveryStatus.accepted => '로봇이 널스스테이션으로 오는 중입니다',
-        DeliveryStatus.delivering => '로봇이 병실로 가는 중입니다',
-        DeliveryStatus.done => '로봇이 대기 자리로 돌아가는 중입니다',
-        _ => '로봇이 움직이는 중입니다',
-      };
+  /// 병실 표시. 값이 '신관 428'처럼 앞말이 붙어 오기도 해서 두 줄까지 받는다.
+  Widget _roomBadge(String room) {
+    final t = room.trim();
+    return Container(
+      width: 48,
+      height: 48,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: AppColors.brandSoft,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        t.isEmpty ? '-' : t.replaceAll(' ', '\n'),
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: AppColors.brand,
+          fontWeight: FontWeight.w900,
+          fontSize: 13,
+          height: 1.15,
+        ),
+      ),
+    );
+  }
+
+  /// 오른쪽 단추 묶음. 지금 무엇을 할 수 있는지에 따라 달라진다.
+  Widget _actions(
+    BuildContext context,
+    DeliveryRequest r,
+    ({String next, String label})? action,
+  ) {
+    // 사람이 넘길 차례 — 다음 단계 단추와 취소.
+    if (action != null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _button(
+            label: _busy ? '처리 중…' : action.label,
+            filled: true,
+            onTap: _busy ? null : () => _move(action.next),
+          ),
+          const SizedBox(width: 8),
+          _button(
+            label: '취소',
+            color: AppColors.inkDim,
+            onTap: _busy ? null : () => _confirmCancel(context),
+          ),
+        ],
+      );
+    }
+
+    // 로봇이 움직이는 중 — 멈춰 세우거나 무를 수 있다.
+    if (r.isMoving) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _button(
+            label: r.paused ? '다시 보내기' : '잠깐 멈춤',
+            color: r.paused ? AppColors.brand : AppColors.warn,
+            onTap: _busy ? null : () => _setPaused(!r.paused),
+          ),
+          const SizedBox(width: 8),
+          _button(
+            label: '배송 취소',
+            color: AppColors.danger,
+            onTap: _busy ? null : () => _confirmCancel(context),
+          ),
+        ],
+      );
+    }
+
+    // 복귀 중이거나 이미 끝난 것 — 사람이 할 일이 없다.
+    if (!r.isActive) return const SizedBox.shrink();
+    return const SizedBox(
+      width: 15,
+      height: 15,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    );
+  }
+
+  Widget _button({
+    required String label,
+    required VoidCallback? onTap,
+    bool filled = false,
+    Color color = AppColors.brand,
+  }) {
+    final off = onTap == null;
+    return SizedBox(
+      height: 46,
+      child: filled
+          ? FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                backgroundColor: color,
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            )
+          : OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: color,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                side: BorderSide(color: off ? AppColors.line : color),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _pill(String text, Color bg, Color fg) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration:
+            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: fg,
+            fontWeight: FontWeight.w800,
+            fontSize: 12.5,
+          ),
+        ),
+      );
 
   Widget _statusChip(String s) {
     final (Color bg, Color fg) = switch (s) {
