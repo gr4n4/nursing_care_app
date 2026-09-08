@@ -12,4 +12,4 @@
 ///   2.x.x  앞자리 — 간호과에 넘긴 큰 배포. '2차 버전'이 2.0.0 이다.
 ///   x.1.x  가운뎃자리 — 기능이 늘었을 때
 ///   x.x.1  뒷자리 — 버그만 고쳤을 때
-const String appVersion = '2.0.2';
+const String appVersion = '2.1.0';
