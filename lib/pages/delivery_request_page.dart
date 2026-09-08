@@ -52,9 +52,12 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     '기저귀', '물티슈', '수액세트', '거즈', '소독솜',
   ];
 
-  /// 이 병동의 병실. 환자가 등록돼 있지 않은 방으로도 물품은 가야 해서
-  /// (빈 병실 준비, 처치 준비 등) 환자 명부와 상관없이 늘 띄운다.
-  static const List<String> _wardRooms = [
+  /// 로봇이 목록을 못 알려줄 때만 쓰는 비상용.
+  ///
+  /// 정상일 때는 settings/delivery_rooms(로봇이 씀)를 쓴다. 여기 적힌 값과
+  /// 로봇 설정을 손으로 맞추면 언젠가 어긋나고, 어긋나면 간호사가 "갈 수
+  /// 있다"고 나온 곳을 골랐다가 실패를 떠안는다.
+  static const List<String> _fallbackRooms = [
     '420', '421', '422', '423', '424', '425',
     '426', '427', '428', '429', '430',
   ];
@@ -81,7 +84,6 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
   final _etcController = TextEditingController();
 
   /// 목록에 없는 곳(처치실 등)을 직접 적는 칸.
-  final _placeController = TextEditingController();
 
   /// 고른 품목 → 수량. 0이면 안 고른 것.
   final Map<String, int> _picked = {};
@@ -93,10 +95,10 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
 
   /// 위치 목록을 아직 읽는 중인가.
   ///
-  /// 이게 없으면 목록이 도착하기 전에는 '비어 있음'으로 보여 직접 입력 칸이
-  /// 떴다가, 도착하는 순간 위치 단추로 바뀐다. 치고 있던 글자가 사라진 것처럼
-  /// 보이므로 다 읽을 때까지 기다린다.
+  /// 다 읽기 전에 그리면 단추가 하나도 없는 빈 칸이 잠깐 보였다가 툭 나타난다.
   bool _loadingRooms = false;
+  /// 목록이 로봇에게서 온 것인가. 비상용 목록이면 화면에 알린다.
+  bool _roomsFromRobot = false;
 
   bool _sending = false;
 
@@ -105,17 +107,16 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     super.initState();
     _room = widget.presetRoom;
     _loadItems();
-    if (widget.presetRoom == null) {
-      _loadingRooms = true;
-      _loadRooms();
-    }
+    // presetRoom 이어도 목록을 읽는다. 환자의 호실이 로봇이 갈 수 있는 곳인지
+    // 확인해야 하기 때문이다. 안 하면 못 가는 곳으로 요청이 만들어진다.
+    _loadingRooms = true;
+    _loadRooms();
   }
 
   @override
   void dispose() {
     _noteController.dispose();
     _etcController.dispose();
-    _placeController.dispose();
     super.dispose();
   }
 
@@ -139,27 +140,34 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     }
   }
 
-  /// 고를 수 있는 위치 목록.
+  /// 고를 수 있는 위치 목록 — 로봇이 알려준 곳만.
   ///
-  /// 병동 방(420~430)은 늘 띄우고, 환자 명부에 그 밖의 방이 있으면 더한다
-  /// (다른 층에 잠시 가 있는 경우). 두 쪽 값의 모양이 달라서 숫자만 뽑아
-  /// 맞춘 뒤 겹치는 것을 걷어낸다.
+  /// 로봇이 켜질 때 settings/delivery_rooms 에 "내가 갈 수 있는 곳"을 쓴다.
+  /// 그 목록만 보여주면 못 가는 곳을 애초에 고를 수 없다. 앱과 로봇 설정을
+  /// 따로 적어 두면 언젠가 어긋나므로, 로봇 설정을 하나뿐인 원본으로 삼는다.
+  ///
+  /// 환자 명부는 더하지 않는다. 명부에 있어도 로봇이 못 가면 소용이 없다.
   Future<void> _loadRooms() async {
-    final rooms = <String>{..._wardRooms};
+    List<String>? fromRobot;
     try {
-      final snap =
-          await FirebaseFirestore.instance.collection('patients').get();
-      for (final d in snap.docs) {
-        final r = _normalizeRoom((d.data()['room'] ?? '').toString());
-        if (r.isNotEmpty) rooms.add(r);
-      }
+      final doc = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('delivery_rooms')
+          .get();
+      fromRobot = (doc.data()?['rooms'] as List<dynamic>?)
+          ?.map((e) => _normalizeRoom(e.toString()))
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
     } catch (_) {
-      // 명부를 못 읽어도 병동 방은 고를 수 있어야 한다.
+      // 못 읽으면 비상용 목록으로 간다. 요청 자체를 막지는 않는다.
     }
-    final list = rooms.toList()..sort();
+    final known = fromRobot != null && fromRobot.isNotEmpty;
+    final list = (known ? fromRobot! : [..._fallbackRooms])..sort();
     if (mounted) {
       setState(() {
         _rooms = list;
+        _roomsFromRobot = known;
         _loadingRooms = false;
       });
     }
@@ -174,9 +182,20 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     return name.isEmpty ? r : '$r · $name';
   }
 
+  /// 로봇이 갈 수 있는 곳인가.
+  ///
+  /// 환자 상세에서 들어오면 그 환자의 호실이 미리 채워지는데, 명부에 있다고
+  /// 로봇이 갈 수 있는 것은 아니다(다른 층에 잠시 가 있는 경우 등).
+  /// 목록에 없으면 보내기를 막아, 실패할 요청이 만들어지지 않게 한다.
+  bool get _roomReachable {
+    final r = _normalizeRoom(_room ?? '');
+    return r.isNotEmpty && _rooms.contains(r);
+  }
+
   bool get _canSend =>
       !_sending &&
-      (_room ?? '').trim().isNotEmpty &&
+      !_loadingRooms &&
+      _roomReachable &&
       (_picked.values.any((v) => v > 0) ||
           _etcController.text.trim().isNotEmpty);
 
@@ -372,6 +391,22 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
                       color: textDark,
                     ),
                   ),
+                  if (!_loadingRooms && !_roomReachable)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        _rooms.isEmpty
+                            ? '로봇이 갈 수 있는 곳을 못 받았습니다'
+                            : '로봇이 갈 수 없는 곳입니다 '
+                                '(갈 수 있는 곳: ${_rooms.join(", ")})',
+                        style: const TextStyle(
+                          color: Color(0xFFB45309),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
                   if ((widget.patientName ?? '').isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -407,58 +442,44 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
       );
     }
 
-    // 직접 적은 곳이 있으면 그것이 우선이다. 그때는 병실 단추를 풀어 준다.
-    final typed = _placeController.text.trim();
-
+    // 자유 입력은 두지 않는다.
+    //
+    // 예전에는 아무 곳이나 칠 수 있었는데, 로봇이 못 가는 곳을 적으면
+    // 로봇이 널스스테이션까지 오고 간호사가 물품을 다 실은 뒤에야 실패했다.
+    // 고를 수 있는 곳만 보여주면 그런 헛걸음이 아예 생기지 않는다.
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_rooms.isNotEmpty) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final r in _rooms) _placeChip(r, true),
+            ],
+          ),
+          if (!_roomsFromRobot) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final r in _rooms) _placeChip(r, typed.isEmpty),
+                const Icon(Icons.info_outline_rounded,
+                    size: 17, color: textGrey),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    '로봇이 갈 수 있는 곳을 아직 못 받아 기본 목록을 보여줍니다. '
+                    '로봇이 꺼져 있으면 배송이 시작되지 않습니다.',
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 14),
           ],
-          TextField(
-            controller: _placeController,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-            decoration: InputDecoration(
-              hintText: _rooms.isEmpty
-                  ? '요청 위치 입력 (예: 421호, 처치실)'
-                  : '목록에 없는 곳 직접 입력 (예: 처치실)',
-              hintStyle: const TextStyle(
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
-              filled: true,
-              fillColor: fieldBg,
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: borderGrey),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: borderGrey),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: mintDark, width: 1.6),
-              ),
-            ),
-            onChanged: (v) => setState(() {
-              final t = v.trim();
-              // 적기 시작하면 그쪽이 요청 위치가 된다.
-              _room = t.isEmpty ? null : t;
-            }),
-          ),
         ],
       ),
     );
@@ -469,7 +490,6 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     return GestureDetector(
       onTap: () => setState(() {
         _room = r;
-        _placeController.clear();
       }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
