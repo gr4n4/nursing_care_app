@@ -52,6 +52,31 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     '기저귀', '물티슈', '수액세트', '거즈', '소독솜',
   ];
 
+  /// 이 병동의 병실. 환자가 등록돼 있지 않은 방으로도 물품은 가야 해서
+  /// (빈 병실 준비, 처치 준비 등) 환자 명부와 상관없이 늘 띄운다.
+  static const List<String> _wardRooms = [
+    '420', '421', '422', '423', '424', '425',
+    '426', '427', '428', '429', '430',
+  ];
+
+  /// 저장할 위치 값을 한 가지 모양으로 맞춘다.
+  ///
+  /// 환자 명부에는 '신관 421'처럼 앞말이 붙어 있고 병실 단추는 '421'이라,
+  /// 그대로 두면 같은 방이 두 값으로 저장된다. 로봇은 이 값으로 갈 곳을
+  /// 고르므로 한 가지로 통일해야 한다. 숫자가 있으면 숫자만, 없으면
+  /// (처치실 등) 적은 그대로 쓴다.
+  static String _normalizeRoom(String v) {
+    final m = RegExp(r'\d+').firstMatch(v);
+    return m?.group(0) ?? v.trim();
+  }
+
+  /// 사람에게 보여 줄 이름. 숫자면 '421호', 아니면 적은 그대로.
+  static String _roomLabel(String v) {
+    final t = v.trim();
+    if (t.isEmpty) return '';
+    return RegExp(r'^\d+$').hasMatch(t) ? '$t호' : t;
+  }
+
   final _noteController = TextEditingController();
   final _etcController = TextEditingController();
 
@@ -114,22 +139,29 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     }
   }
 
-  /// 환자 없이 요청할 때 고를 위치 목록. 등록된 환자들의 호실에서 뽑는다.
+  /// 고를 수 있는 위치 목록.
+  ///
+  /// 병동 방(420~430)은 늘 띄우고, 환자 명부에 그 밖의 방이 있으면 더한다
+  /// (다른 층에 잠시 가 있는 경우). 두 쪽 값의 모양이 달라서 숫자만 뽑아
+  /// 맞춘 뒤 겹치는 것을 걷어낸다.
   Future<void> _loadRooms() async {
+    final rooms = <String>{..._wardRooms};
     try {
       final snap =
           await FirebaseFirestore.instance.collection('patients').get();
-      final rooms = snap.docs
-          .map((d) => (d.data()['room'] ?? '').toString().trim())
-          .where((r) => r.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-      if (mounted) setState(() => _rooms = rooms);
+      for (final d in snap.docs) {
+        final r = _normalizeRoom((d.data()['room'] ?? '').toString());
+        if (r.isNotEmpty) rooms.add(r);
+      }
     } catch (_) {
-      // 목록을 못 얻어도 직접 입력으로 요청할 수 있다.
-    } finally {
-      if (mounted) setState(() => _loadingRooms = false);
+      // 명부를 못 읽어도 병동 방은 고를 수 있어야 한다.
+    }
+    final list = rooms.toList()..sort();
+    if (mounted) {
+      setState(() {
+        _rooms = list;
+        _loadingRooms = false;
+      });
     }
   }
 
@@ -138,8 +170,8 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     final room = (_room ?? '').trim();
     final name = (widget.patientName ?? '').trim();
     if (room.isEmpty) return '물품 배송';
-    final r = room.replaceAll('호', '');
-    return name.isEmpty ? '$r호' : '$r호 · $name';
+    final r = _roomLabel(_normalizeRoom(room));
+    return name.isEmpty ? r : '$r · $name';
   }
 
   bool get _canSend =>
@@ -149,7 +181,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           _etcController.text.trim().isNotEmpty);
 
   Future<void> _send() async {
-    final room = (_room ?? '').trim();
+    final room = _normalizeRoom(_room ?? '');
     if (room.isEmpty) return;
 
     final items = <DeliveryItem>[
@@ -175,7 +207,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$room 물품 요청을 보냈습니다.'),
+          content: Text('${_roomLabel(room)} 물품 요청을 보냈습니다.'),
           backgroundColor: successColor,
         ),
       );
@@ -310,7 +342,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
   Widget _placeCard() {
     // 환자 상세에서 들어온 경우 — 위치가 이미 정해져 있다.
     if (widget.presetRoom != null) {
-      final r = widget.presetRoom!.replaceAll('호', '').trim();
+      final r = _roomLabel(_normalizeRoom(widget.presetRoom!));
       return _card(
         child: Row(
           children: [
@@ -333,7 +365,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$r호',
+                    r,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
@@ -450,7 +482,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           ),
         ),
         child: Text(
-          '${r.replaceAll('호', '')}호',
+          _roomLabel(r),
           style: TextStyle(
             color: on ? mintDark : textGrey,
             fontSize: 15,
