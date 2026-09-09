@@ -11,7 +11,8 @@ import '../models/delivery_request.dart';
 /// 호실을 손으로 치면 오타가 나므로 patients.room 을 그대로 쓴다.
 ///
 /// 보낼 곳이 병실만은 아니다(처치실·널스스테이션 등). 그래서 화면에서는
-/// '호실'이 아니라 '요청 위치'라고 부르고, 목록에 없는 곳은 직접 적게 한다.
+/// '호실'이 아니라 '요청 위치'라고 부른다. 다만 아무 데나 적을 수는 없다 —
+/// 로봇이 갈 수 있는 곳만 고르게 해야 헛걸음이 생기지 않는다.
 ///
 /// 품목은 settings/delivery_items 에서 읽는다. 병동마다 쓰는 물건이 다르고
 /// 바뀌기도 해서, 앱을 다시 배포하지 않고 콘솔에서 고칠 수 있게 열어 두었다.
@@ -82,8 +83,6 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
 
   final _noteController = TextEditingController();
   final _etcController = TextEditingController();
-
-  /// 목록에 없는 곳(처치실 등)을 직접 적는 칸.
 
   /// 고른 품목 → 수량. 0이면 안 고른 것.
   final Map<String, int> _picked = {};
