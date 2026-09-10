@@ -154,8 +154,17 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           .collection('settings')
           .doc('delivery_rooms')
           .get();
+      // 로봇이 알려준 이름은 그대로 쓴다. _normalizeRoom 을 씌우지 않는다.
+      //
+      // 이 목록은 로봇 설정(ward_waypoints.json 등)의 목적지 이름 그 자체이고,
+      // 로봇은 이 이름으로 갈 곳을 찾는다. 여기서 숫자만 뽑으면 '목적지1' 이
+      // '1' 이 되어 로봇에 그런 이름이 없고, 그 곳으로 보낸 배송은 전부
+      // 실패한다. 병실이 420~430 처럼 숫자뿐일 때만 우연히 맞았다.
+      //
+      // _normalizeRoom 은 환자 명부의 '신관 421' 처럼 사람이 적은 값을
+      // 맞출 때 쓰는 것이지, 로봇이 준 정답에 쓰는 것이 아니다.
       fromRobot = (doc.data()?['rooms'] as List<dynamic>?)
-          ?.map((e) => _normalizeRoom(e.toString()))
+          ?.map((e) => e.toString().trim())
           .where((e) => e.isNotEmpty)
           .toSet()
           .toList();
@@ -166,6 +175,9 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     final list = (known ? fromRobot : [..._fallbackRooms])..sort();
     if (mounted) {
       setState(() {
+        // 환자 상세에서 넘어온 호실('신관 421')을 목록의 이름('421')으로
+        // 바꿔 둔다. 목록을 읽기 전에는 맞출 대상이 없어 여기서 한다.
+        _room = _resolveRoom(_room, list);
         _rooms = list;
         _roomsFromRobot = known;
         _loadingRooms = false;
@@ -178,8 +190,24 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
     final room = (_room ?? '').trim();
     final name = (widget.patientName ?? '').trim();
     if (room.isEmpty) return '물품 배송';
-    final r = _roomLabel(_normalizeRoom(room));
+    final r = _roomLabel(_resolveRoom(room, _rooms) ?? room);
     return name.isEmpty ? r : '$r · $name';
+  }
+
+  /// 사람이 적은 값을 로봇이 아는 이름으로 바꾼다.
+  ///
+  /// 환자 명부에는 '신관 421' 처럼 앞말이 붙어 있는데 로봇의 목적지는 '421'
+  /// 이다. 그대로 두면 같은 방인데 못 찾는다. 먼저 적힌 그대로 찾아보고,
+  /// 없으면 숫자만 뽑아 찾는다. 어느 쪽으로도 없으면 null — 로봇이 갈 수
+  /// 없는 곳이므로 보내기를 막아야 한다.
+  ///
+  /// 목록의 이름 자체는 절대 건드리지 않는다. 그게 로봇이 아는 정답이다.
+  static String? _resolveRoom(String? v, List<String> rooms) {
+    final t = (v ?? '').trim();
+    if (t.isEmpty) return null;
+    if (rooms.contains(t)) return t;
+    final n = _normalizeRoom(t);
+    return rooms.contains(n) ? n : null;
   }
 
   /// 로봇이 갈 수 있는 곳인가.
@@ -187,10 +215,7 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
   /// 환자 상세에서 들어오면 그 환자의 호실이 미리 채워지는데, 명부에 있다고
   /// 로봇이 갈 수 있는 것은 아니다(다른 층에 잠시 가 있는 경우 등).
   /// 목록에 없으면 보내기를 막아, 실패할 요청이 만들어지지 않게 한다.
-  bool get _roomReachable {
-    final r = _normalizeRoom(_room ?? '');
-    return r.isNotEmpty && _rooms.contains(r);
-  }
+  bool get _roomReachable => _resolveRoom(_room, _rooms) != null;
 
   bool get _canSend =>
       !_sending &&
@@ -200,8 +225,9 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
           _etcController.text.trim().isNotEmpty);
 
   Future<void> _send() async {
-    final room = _normalizeRoom(_room ?? '');
-    if (room.isEmpty) return;
+    // 로봇이 아는 이름 그대로 보낸다. 여기서 모양을 바꾸면 로봇이 못 찾는다.
+    final room = _resolveRoom(_room, _rooms);
+    if (room == null) return;
 
     final items = <DeliveryItem>[
       for (final e in _picked.entries)
@@ -361,7 +387,8 @@ class _DeliveryRequestPageState extends State<DeliveryRequestPage> {
   Widget _placeCard() {
     // 환자 상세에서 들어온 경우 — 위치가 이미 정해져 있다.
     if (widget.presetRoom != null) {
-      final r = _roomLabel(_normalizeRoom(widget.presetRoom!));
+      final r = _roomLabel(
+          _resolveRoom(widget.presetRoom, _rooms) ?? widget.presetRoom!.trim());
       return _card(
         child: Row(
           children: [
