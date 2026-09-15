@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
@@ -29,6 +30,20 @@ class AlertCenter {
   static final Set<String> _shown = <String>{};
   static bool _dialogOpen = false;
   static web.HTMLAudioElement? _audio;
+
+  /// 지금 떠 있는 팝업이 어느 경보의 것인가.
+  ///
+  /// 다른 기기에서 확인되었을 때 "내가 띄운 게 그거였나"를 가리는 데 쓴다.
+  /// 이 값이 없으면 남이 확인해도 내 화면은 계속 울린다.
+  static String? _openDocId;
+
+  /// 떠 있는 팝업을 코드에서 닫기 위한 context.
+  /// 사용자가 누르지 않아도 닫아야 하는 경우가 생겨서 들고 있는다.
+  static BuildContext? _dialogContext;
+
+  /// 확인 표시에 남길 내 이름. 나중에 알림 기록을 볼 때 이메일보다
+  /// 이름이 읽힌다. 앱을 켤 때 한 번만 읽어 둔다.
+  static String _myName = '';
 
   /// 소리가 막혔는지. 브라우저가 자동 재생을 거부하면 팝업에서 알려주고
   /// 직접 누를 수단을 준다. 조용히 실패하면 아무도 모른 채 경보를 놓친다.
@@ -74,6 +89,7 @@ class AlertCenter {
   static void start(GlobalKey<NavigatorState> navigatorKey) {
     if (_sub != null) return;
     _since = DateTime.now();
+    _loadMyName();
 
     // kind 로 걸러내면서 sentAt 으로 정렬하면 복합 색인이 필요하고, 색인이 만들어지는
     // 동안 구독이 통째로 실패한다. 어차피 앱을 켠 뒤에 새로 오는 경보만 보면 되는데
@@ -99,6 +115,15 @@ class AlertCenter {
           final kind = (data['kind'] ?? '').toString();
           if (!criticalKinds.contains(kind)) continue;
 
+          // 누군가 이미 확인한 경보는 이 기기에서 울리지 않는다. 한 사람이
+          // 달려갔는데 나머지 기기가 계속 우는 것을 막으려는 것이다.
+          // 마침 그 경보를 띄워 놓았다면 스스로 닫는다.
+          if (data['ackedAt'] != null) {
+            _shown.add(doc.id);
+            _dismissIfOpen(doc.id);
+            continue;
+          }
+
           final sentAt = data['sentAt'];
           if (sentAt is! Timestamp) continue;
           // 앱을 켜기 전에 있었던 경보는 다시 울리지 않는다.
@@ -107,6 +132,7 @@ class AlertCenter {
           _raise(
             navigatorKey,
             id: doc.id,
+            docId: doc.id,
             kind: kind,
             title: (data['title'] ?? '경보').toString(),
             body: (data['body'] ?? '').toString(),
@@ -122,6 +148,8 @@ class AlertCenter {
     _sub = null;
     _settingsSub?.cancel();
     _settingsSub = null;
+    _openDocId = null;
+    _dialogContext = null;
     _stopSound();
   }
 
@@ -138,6 +166,9 @@ class AlertCenter {
       // Firestore 쪽과 같은 경보를 두 번 띄우지 않도록 발송 쪽이 준 tag 를 쓴다.
       id: (data['tag'] ?? data['logId'] ?? '${data['title']}${data['body']}')
           .toString(),
+      // 확인 표시를 남기려면 어느 문서인지 알아야 한다. 발송 쪽이 logId 를
+      // 실어 주지 않으면 이 경로로 뜬 팝업은 확인해도 다른 기기가 모른다.
+      docId: data['logId']?.toString(),
       kind: kind,
       title: (data['title'] ?? '경보').toString(),
       body: (data['body'] ?? '').toString(),
@@ -150,6 +181,7 @@ class AlertCenter {
     required String kind,
     required String title,
     required String body,
+    String? docId,
   }) {
     if (_shown.contains(id)) return;
     _shown.add(id);
@@ -164,16 +196,70 @@ class AlertCenter {
     if (context == null) return;
 
     _dialogOpen = true;
+    _openDocId = docId;
     _startSound();
 
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _AlertDialog(kind: kind, title: title, body: body),
+      builder: (ctx) {
+        // 다른 기기에서 확인되면 사용자가 누르지 않아도 닫아야 한다.
+        _dialogContext = ctx;
+        return _AlertDialog(
+          kind: kind,
+          title: title,
+          body: body,
+          docId: docId,
+        );
+      },
     ).whenComplete(() {
       _dialogOpen = false;
+      _openDocId = null;
+      _dialogContext = null;
       _stopSound();
     });
+  }
+
+  /// 지금 떠 있는 팝업이 이 경보의 것이면 닫는다.
+  /// 다른 경보가 떠 있거나 아무것도 없으면 아무 일도 하지 않는다.
+  static void _dismissIfOpen(String docId) {
+    if (_openDocId != docId) return;
+    final ctx = _dialogContext;
+    if (ctx == null || !ctx.mounted) return;
+    Navigator.pop(ctx);
+  }
+
+  /// 확인 표시에 쓸 내 이름을 미리 읽어 둔다.
+  /// 못 읽으면 이메일만 남는다 — 확인 자체를 막을 일은 아니다.
+  static Future<void> _loadMyName() async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+    try {
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(email).get();
+      _myName = (doc.data()?['name'] ?? '').toString().trim();
+    } catch (e) {
+      debugPrint('확인자 이름 읽기 실패: $e');
+    }
+  }
+
+  /// 확인했다고 남긴다. 이 표시를 보고 다른 기기들이 조용해진다.
+  ///
+  /// 실패해도 팝업은 닫는다. 눌렀는데 안 닫히면 사용자는 고장으로 여기고,
+  /// 그 사이 경보음은 계속 난다. 기록이 빠지는 것보다 그쪽이 나쁘다.
+  static Future<void> _ack(String docId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('notification_log')
+          .doc(docId)
+          .update({
+        'ackedAt': FieldValue.serverTimestamp(),
+        'ackedBy': FirebaseAuth.instance.currentUser?.email ?? '',
+        'ackedByName': _myName,
+      });
+    } catch (e) {
+      debugPrint('경보 확인 표시 실패: $e');
+    }
   }
 
   // ---------- 소리 ----------
@@ -224,10 +310,15 @@ class _AlertDialog extends StatelessWidget {
   final String title;
   final String body;
 
+  /// 확인 표시를 남길 notification_log 문서. 푸시로만 들어온 경보는
+  /// 문서를 모를 수 있어 없을 수도 있다(그때는 이 기기만 조용해진다).
+  final String? docId;
+
   const _AlertDialog({
     required this.kind,
     required this.title,
     required this.body,
+    this.docId,
   });
 
   bool get isFall => kind == 'fall';
@@ -319,7 +410,14 @@ class _AlertDialog extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      // 확인 표시가 올라가기를 기다리지 않는다. 눌렀으면 바로
+                      // 닫혀야 한다 — 네트워크가 느리다고 경보음이 이어지면
+                      // 누른 사람은 고장으로 여긴다.
+                      final id = docId;
+                      if (id != null) AlertCenter._ack(id);
+                      Navigator.pop(context);
+                    },
                     child: const Text('확인'),
                   ),
                 ),

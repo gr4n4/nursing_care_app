@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Care Note Firestore 보안 규칙.
+// NRCarec Firestore 보안 규칙.
 //
 // 전제: 로그인 계정은 간호사(nurse)와 관리자(admin)뿐이다.
 // 환자는 계정이 아니라 patients 컬렉션의 문서이므로, 환자 본인 접근 개념이 없다.
@@ -75,12 +75,19 @@ service cloud.firestore {
       allow write: if signedIn();
     }
 
-    // 알림 발송 기록. 앱에서는 "무슨 알림이 언제 갔는지" 확인만 하면 되므로
-    // 읽기만 열고 쓰기는 막는다. 기록을 남기는 스케줄러는 서비스 계정이라
-    // 이 규칙을 거치지 않으므로 쓰기를 열어줄 필요가 없다.
+    // 알림 발송 기록. 내용을 남기는 쪽(스케줄러·emfit_server·압력 서버)은
+    // 서비스 계정이라 이 규칙을 거치지 않으므로, 앱에는 만들기·지우기를 막는다.
+    //
+    // 다만 '확인했다'는 표시만은 앱이 남겨야 한다. 한 사람이 확인하면 다른
+    // 기기에서는 울리지 않아야 하는데, 여러 기기가 함께 보는 곳이 여기뿐이다.
+    // 그래서 확인 표시 세 칸만 열고, 경보 내용은 그대로 막아 둔다.
+    // (그 칸들만 바꾸는 수정인지 affectedKeys 로 확인한다.)
     match /notification_log/{docId} {
       allow read: if signedIn();
-      allow write: if false;
+      allow create, delete: if false;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['ackedAt', 'ackedBy', 'ackedByName']);
     }
 
     // 물품 배송 요청. 앱에서 만들고, 널스스테이션 화면에서 진행시킨다.

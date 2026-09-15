@@ -19,6 +19,16 @@ class NotificationLogPage extends StatelessWidget {
   static const Color borderGrey = Color(0xFFE5E7EB);
   static const Color dangerColor = Color(0xFFEF4444);
 
+  // 확인 표시. 상태색(주의·위험)과 헷갈리면 안 되므로 초록으로 가른다.
+  static const Color ackColor = Color(0xFF15803D);
+  static const Color ackBg = Color(0xFFE8F4EC);
+  static const Color ackBorder = Color(0xFFC3E2CE);
+
+  /// '20:15'. 확인 시각처럼 같은 줄 안에서 짧게 붙일 때 쓴다.
+  String hhmm(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:'
+      '${dt.minute.toString().padLeft(2, '0')}';
+
   /// 발송 시각을 '오늘 20:15' / '08.23 20:15' 형태로.
   /// 병동에서는 "언제 갔는지"가 핵심이라 초 단위는 생략한다.
   String formatSentAt(DateTime dt) {
@@ -141,6 +151,15 @@ class NotificationLogPage extends StatelessWidget {
     final failure = data['failureCount'];
     final failed = failure is int && failure > 0;
 
+    // 누가 언제 확인했는지. 경보가 방치되지 않았다는 근거가 되고,
+    // 나중에 "그때 누가 갔었죠"를 물을 때 답이 된다.
+    final ackedAt = data['ackedAt'];
+    final acked = ackedAt is Timestamp;
+    final ackName = (data['ackedByName'] ?? '').toString().trim();
+    final ackWho = ackName.isNotEmpty
+        ? ackName
+        : (data['ackedBy'] ?? '').toString().split('@').first;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -209,6 +228,36 @@ class NotificationLogPage extends StatelessWidget {
                       color: dangerColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+                if (acked) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: ackBg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: ackBorder),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_rounded,
+                            size: 13, color: ackColor),
+                        const SizedBox(width: 5),
+                        Text(
+                          ackWho.isEmpty
+                              ? '확인함 · ${hhmm(ackedAt.toDate())}'
+                              : '$ackWho 확인 · ${hhmm(ackedAt.toDate())}',
+                          style: const TextStyle(
+                            color: ackColor,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
