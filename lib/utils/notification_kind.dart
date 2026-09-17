@@ -12,6 +12,13 @@ import '../theme/app_colors.dart';
 /// 가져온 SVG 를 쓴다. 잠금화면 푸시 아이콘(web/icons/notify-*.png)도 같은
 /// 그림을 옮긴 것이라 앱과 알림이 같은 모양으로 보인다.
 class NotificationKind {
+  /// 경보로 취급하는 종류 — 소리를 내고, 확인을 눌러야 닫히는 팝업을 띄운다.
+  ///
+  /// AlertCenter 는 dart:js_interop 을 써서 테스트(VM)에서 못 불러온다.
+  /// 그래서 이 목록을 여기 둔다 — 테스트가 진짜 값을 보게 하려는 것이다.
+  /// 양쪽에 따로 적어 두면 한쪽만 고쳐져 새 경보가 조용히 안 울린다.
+  static const Set<String> criticalKinds = {'fall', 'bedside', 'pressure'};
+
   /// Material 아이콘을 쓰는 종류(식사·배설)에만 있다.
   final IconData? icon;
 
@@ -58,6 +65,18 @@ class NotificationKind {
     critical: true,
   );
 
+  /// 욕창 위험(압력 센서). 걸터앉음과 같은 warn 색을 쓴다.
+  ///
+  /// 둘 다 '낙상보다는 덜 급하지만 두면 안 되는' 같은 급이라 색을 새로
+  /// 만들지 않았다. 구분은 그림이 한다 — 색을 하나 더 늘리면 관제 화면에서
+  /// '빨강·주황·또 다른 주황'이 되어 급한 정도를 색으로 읽을 수 없게 된다.
+  static const _pressure = NotificationKind._(
+    svgAsset: 'assets/icon/alert-pressure.svg',
+    color: AppColors.warn,
+    background: AppColors.warnBg,
+    critical: true,
+  );
+
   static const _unknown = NotificationKind._(
     icon: Icons.notifications_rounded,
     color: AppColors.inkMid,
@@ -74,6 +93,8 @@ class NotificationKind {
         return _fall;
       case 'bedside':
         return _bedside;
+      case 'pressure':
+        return _pressure;
       default:
         return _unknown;
     }

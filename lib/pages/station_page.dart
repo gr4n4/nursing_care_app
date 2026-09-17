@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../app_version.dart';
 import '../data/food_table.dart';
 import 'delivery_dispatch_page.dart';
+import 'pressure_monitor_page.dart';
+import '../utils/alert_center.dart';
 import '../utils/care_date.dart';
 import '../utils/delivery_watcher.dart';
 import '../theme/app_colors.dart';
@@ -946,6 +948,25 @@ class _StationPageState extends State<StationPage> {
                 selected: false,
                 badge: waiting,
                 onTap: () => openDispatch(context),
+              ),
+            ),
+            // 압력 센서가 올린 욕창 경보. 팝업은 한 번 뜨고 닫히면 그만이라,
+            // 아직 아무도 확인하지 않은 것이 남았는지 숫자로 보인다.
+            ValueListenableBuilder<int>(
+              valueListenable: AlertCenter.pendingPressure,
+              builder: (context, waiting, _) => sideMenuButton(
+                icon: Icons.airline_seat_flat_rounded,
+                label: '욕창 모니터링',
+                selected: false,
+                badge: waiting,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PressureMonitorPage(),
+                    ),
+                  );
+                },
               ),
             ),
             sideMenuButton(

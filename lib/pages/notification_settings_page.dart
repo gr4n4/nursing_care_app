@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/feedback.dart';
 import '../utils/notification_kind.dart';
+import '../widgets/pressure_status_view.dart';
 import '../utils/push_messaging.dart';
 
 /// 기록 누락 푸시 알림의 규칙을 정하는 화면.
@@ -51,9 +52,11 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   TimeOfDay nightStart = const TimeOfDay(hour: 22, minute: 0);
   TimeOfDay nightEnd = const TimeOfDay(hour: 6, minute: 0);
 
-  // 센서 경보(AI Radar). 발송은 emfit_server 가 하고, 이 값을 읽어 판단한다.
+  // 센서 경보. 발송은 다른 데서 하고(레이더는 emfit_server, 압력은 압력
+  // 서버), 양쪽 모두 이 값을 읽어 보낼지 판단한다.
   bool fallEnabled = true;
   bool bedsideEnabled = true;
+  bool pressureEnabled = true;
 
   // 걸터앉음만 시간대를 제한한다. 낙상은 시간을 가릴 일이 아니라 종일 받는다.
   TimeOfDay bedsideStart = const TimeOfDay(hour: 0, minute: 0);
@@ -142,6 +145,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       final sensor = (data['sensorAlerts'] as Map<String, dynamic>?) ?? {};
       fallEnabled = sensor['fall'] != false;
       bedsideEnabled = sensor['bedside'] != false;
+      pressureEnabled = sensor['pressure'] != false;
       bedsideStart = parseTime(sensor['bedsideStart'], bedsideStart);
       bedsideEnd = parseTime(sensor['bedsideEnd'], bedsideEnd);
     }
@@ -184,6 +188,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           // 시작과 끝이 같으면 '종일'로 본다.
           'bedsideStart': formatTime(bedsideStart),
           'bedsideEnd': formatTime(bedsideEnd),
+          // 욕창은 시간대를 가리지 않는다. 90분 누적으로 잡는 일이라
+          // 밤낮을 나눌 것이 아니고, 오히려 밤에 더 생기기 쉽다.
+          'pressure': pressureEnabled,
         },
         'updatedAt': Timestamp.now(),
         'updatedBy': myEmail,
@@ -740,6 +747,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   Widget sensorCard() {
     Widget row({
       required String title,
+      required String kind,
       required String desc,
       required bool value,
       required Color color,
@@ -757,9 +765,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 borderRadius: BorderRadius.circular(11),
               ),
               child: Center(
-                child: NotificationKind.of(
-                  title.startsWith('낙상') ? 'fall' : 'bedside',
-                ).glyph(size: 18, tint: color),
+                child: NotificationKind.of(kind).glyph(size: 18, tint: color),
               ),
             ),
             const SizedBox(width: 11),
@@ -810,6 +816,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           ),
           row(
             title: '낙상',
+            kind: 'fall',
             desc: '즉시 조치가 필요합니다. 시간을 가리지 않고 알립니다.',
             value: fallEnabled,
             color: dangerColor,
@@ -829,6 +836,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             ),
           row(
             title: '걸터앉음',
+            kind: 'bedside',
             desc: '낙상 전 단계입니다. 시간대를 정할 수 있습니다.',
             value: bedsideEnabled,
             color: const Color(0xFFB45309),
@@ -858,6 +866,19 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               ),
             ),
           ],
+          row(
+            title: '욕창 위험',
+            kind: 'pressure',
+            desc: '압력이 한자리에 오래 머무르면 알립니다.',
+            value: pressureEnabled,
+            color: const Color(0xFFB45309),
+            onChanged: (v) => pressureEnabled = v,
+          ),
+          if (pressureEnabled)
+            const Padding(
+              padding: EdgeInsets.only(top: 10, left: 45),
+              child: PressureStatusView(),
+            ),
         ],
       ),
     );

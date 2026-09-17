@@ -112,6 +112,24 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 압력 경보의 스냅샷(그 순간 매트리스 그림, base64 PNG 약 3KB).
+    // 경보 문서와 ID 가 같다. 경보 문서에 그림을 넣지 않은 이유는,
+    // notification_log 를 실시간 구독하는 화면이 다섯 군데라 목록을 열
+    // 때마다 100건어치 그림이 따라오기 때문이다. 여기 두면 눌러 볼 때만 온다.
+    // 쓰는 쪽은 압력 서버(서비스 계정)뿐이라 규칙을 안 거친다.
+    match /pressure_snapshots/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // 욕창이 생긴 부위. 압력 대시보드에서도, NRCarec 에서도 적을 수 있고
+    // 압력 서버가 이 문서를 보고 로컬 warnings.log 에도 같은 값을 붙인다.
+    // 양쪽에서 적으므로 나중에 적은 쪽이 남는다(한 경보에 두 번 다르게
+    // 적을 일은 없다).
+    match /pressure_sites/{docId} {
+      allow read, write: if signedIn();
+    }
+
     // 로봇 상태(위치·온라인 여부). 화면은 읽기만 한다.
     // 쓰는 쪽은 로봇뿐이고, 로봇은 서비스 계정이라 규칙을 안 거친다.
     match /robot_state/{docId} {

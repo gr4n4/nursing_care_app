@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/notification_kind.dart';
+import '../utils/pressure_site.dart';
+import '../widgets/pressure_snapshot.dart';
 
 /// 지금까지 발송된 기록 누락 알림 목록.
 ///
@@ -134,19 +136,30 @@ class NotificationLogPage extends StatelessWidget {
     );
   }
 
-  Widget logTile(Map<String, dynamic> data) {
+  /// '421호 · 김복순' / '421호 김복순' / '김복순' / '대상 미상'.
+  ///
+  /// 압력 경보는 센서에 지어 준 이름표만 있고 환자가 누구인지는 모른다.
+  /// 그 이름표가 room 에 통째로 들어오므로('421호 김복순'), 이름이 비었다고
+  /// '환자 미상'으로 내보내면 정작 아는 것을 버리는 셈이 된다.
+  /// 이름이 따로 있는 경보(식사·낙상)만 예전처럼 '호'를 붙여 잇는다.
+  String whoText(String room, String name) {
+    if (name.isEmpty) return room.isEmpty ? '대상 미상' : room;
+    if (room.isEmpty) return name;
+    return '$room호 · $name';
+  }
+
+  Widget logTile(BuildContext context, String docId, Map<String, dynamic> data) {
     final kind = (data['kind'] ?? '').toString();
     final style = NotificationKind.of(kind);
+    final isPressure = kind == 'pressure';
 
     final sent = data['sentAt'];
     final sentText =
         sent is Timestamp ? formatSentAt(sent.toDate()) : '시각 미상';
 
-    final room = (data['room'] ?? '').toString();
-    final name = (data['patientName'] ?? '').toString();
-    final who = name.isEmpty
-        ? '환자 미상'
-        : (room.isEmpty ? name : '$room호 · $name');
+    final room = (data['room'] ?? '').toString().trim();
+    final name = (data['patientName'] ?? '').toString().trim();
+    final who = whoText(room, name);
 
     final failure = data['failureCount'];
     final failed = failure is int && failure > 0;
@@ -231,37 +244,55 @@ class NotificationLogPage extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (acked) ...[
+                if (isPressure || acked) ...[
                   const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: ackBg,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: ackBorder),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.check_rounded,
-                            size: 13, color: ackColor),
-                        const SizedBox(width: 5),
-                        Text(
-                          ackWho.isEmpty
-                              ? '확인함 · ${hhmm(ackedAt.toDate())}'
-                              : '$ackWho 확인 · ${hhmm(ackedAt.toDate())}',
-                          style: const TextStyle(
-                            color: ackColor,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (isPressure) PressureSiteChip(docId: docId),
+                      if (acked) _ackChip(ackWho, ackedAt.toDate()),
+                    ],
                   ),
                 ],
               ],
+            ),
+          ),
+          // 압력 경보에는 그 순간 매트리스 그림이 딸려 온다. 눌러서 크게 볼
+          // 수 있다 — 작은 그림으로는 어느 칸인지 가늠하기 어렵다.
+          if (isPressure) ...[
+            const SizedBox(width: 12),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () =>
+                  showPressureSnapshot(context, docId: docId, who: who),
+              child: PressureSnapshot(docId: docId, width: 40, height: 80),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _ackChip(String who, DateTime at) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: ackBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: ackBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_rounded, size: 13, color: ackColor),
+          const SizedBox(width: 5),
+          Text(
+            who.isEmpty ? '확인함 · ${hhmm(at)}' : '$who 확인 · ${hhmm(at)}',
+            style: const TextStyle(
+              color: ackColor,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -387,7 +418,11 @@ class NotificationLogPage extends StatelessWidget {
                             return Column(
                               children: [
                                 for (final doc in docs)
-                                  logTile(doc.data() as Map<String, dynamic>),
+                                  logTile(
+                                    context,
+                                    doc.id,
+                                    doc.data() as Map<String, dynamic>,
+                                  ),
                               ],
                             );
                           },

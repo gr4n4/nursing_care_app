@@ -215,10 +215,13 @@ class NotificationBell {
 
   static Widget _row(Map<String, dynamic> data) {
     final style = NotificationKind.of((data['kind'] ?? '').toString());
-    final room = (data['room'] ?? '').toString();
-    final name = (data['patientName'] ?? '').toString();
+    final room = (data['room'] ?? '').toString().trim();
+    final name = (data['patientName'] ?? '').toString().trim();
+    // 압력 경보는 센서에 지어 준 이름표만 있고 환자가 누구인지는 모른다.
+    // 그 이름표가 room 에 통째로('421호 김복순') 들어오므로, 이름이 비었다고
+    // 빈 줄로 두면 어느 방 얘기인지 알 수 없게 된다.
     final who = name.isEmpty
-        ? ''
+        ? room
         : (room.isEmpty ? name : '$room호 · $name');
 
     return Padding(

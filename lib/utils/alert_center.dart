@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../theme/app_colors.dart';
+import '../widgets/pressure_snapshot.dart';
 import 'notification_kind.dart';
+import 'pressure_site.dart';
 
 /// 즉시 조치가 필요한 경보(낙상·걸터앉음)를 소리와 팝업으로 알린다.
 ///
@@ -24,7 +26,16 @@ class AlertCenter {
   const AlertCenter._();
 
   /// 경보로 취급할 종류. 이 값들만 소리와 팝업을 쓴다.
-  static const Set<String> criticalKinds = {'fall', 'bedside'};
+  /// 목록은 NotificationKind 에 둔다 — 여기는 테스트에서 불러올 수 없다.
+  static const Set<String> criticalKinds = NotificationKind.criticalKinds;
+
+  /// 소리를 이어서 낼 종류.
+  ///
+  /// 낙상·걸터앉음은 확인을 누를 때까지 계속 울린다. 욕창은 한 번만 낸다 —
+  /// 90분 누적으로 잡는 일이라 1분 안에 달려갈 것이 아니고, 압력 대시보드를
+  /// 만든 쪽도 같은 판단을 했다(짧은 소리 한 번 + 확인해야 닫히는 카드).
+  /// 다그치는 강도는 소리를 잇는 대신 15분마다 다시 뜨는 것으로 낸다.
+  static const Set<String> _loopingKinds = {'fall', 'bedside'};
 
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
   static final Set<String> _shown = <String>{};
@@ -45,9 +56,19 @@ class AlertCenter {
   /// 이름이 읽힌다. 앱을 켤 때 한 번만 읽어 둔다.
   static String _myName = '';
 
+  /// 지금 띄운 경보의 소리를 이어서 낼지. 소리가 막혔을 때 다시 켜는
+  /// 버튼도 같은 값을 써야 해서 들고 있는다.
+  static bool _loopSound = true;
+
   /// 소리가 막혔는지. 브라우저가 자동 재생을 거부하면 팝업에서 알려주고
   /// 직접 누를 수단을 준다. 조용히 실패하면 아무도 모른 채 경보를 놓친다.
   static final ValueNotifier<bool> soundBlocked = ValueNotifier<bool>(false);
+
+  /// 아직 아무도 확인하지 않은 욕창 경보 수. 옆 메뉴에 숫자로 붙인다.
+  ///
+  /// 이미 받고 있는 구독에서 세므로 읽기가 늘지 않는다. 팝업은 한 번 뜨고
+  /// 닫히면 그만이라, 들어가 보지 않아도 남은 것이 있는지 보이게 한다.
+  static final ValueNotifier<int> pendingPressure = ValueNotifier<int>(0);
 
   /// 앱을 켠 시각. 이전에 쌓인 지난 경보까지 울리면 안 되므로 기준점을 잡는다.
   static late DateTime _since;
@@ -62,6 +83,9 @@ class AlertCenter {
   static bool _wanted(String kind) {
     final sensor = (_settings['sensorAlerts'] as Map<String, dynamic>?) ?? const {};
     if (kind == 'fall') return sensor['fall'] != false;
+    // 욕창은 종일 받는다. 90분 누적이라 밤낮을 가릴 일이 아니고, 오히려
+    // 밤에 오래 같은 자세로 누워 있어 더 생기기 쉽다.
+    if (kind == 'pressure') return sensor['pressure'] != false;
     if (kind != 'bedside') return true;
     if (sensor['bedside'] == false) return false;
 
@@ -110,9 +134,11 @@ class AlertCenter {
         .snapshots()
         .listen(
       (snap) {
+        var waiting = 0;
         for (final doc in snap.docs) {
           final data = doc.data();
           final kind = (data['kind'] ?? '').toString();
+          if (kind == 'pressure' && data['ackedAt'] == null) waiting++;
           if (!criticalKinds.contains(kind)) continue;
 
           // 누군가 이미 확인한 경보는 이 기기에서 울리지 않는다. 한 사람이
@@ -138,6 +164,7 @@ class AlertCenter {
             body: (data['body'] ?? '').toString(),
           );
         }
+        pendingPressure.value = waiting;
       },
       onError: (Object e) => debugPrint('경보 구독 오류: $e'),
     );
@@ -197,6 +224,7 @@ class AlertCenter {
 
     _dialogOpen = true;
     _openDocId = docId;
+    _loopSound = _loopingKinds.contains(kind);
     _startSound();
 
     showDialog<void>(
@@ -274,7 +302,7 @@ class AlertCenter {
       final audio =
           web.document.createElement('audio') as web.HTMLAudioElement
             ..src = 'assets/assets/sound/alert.wav'
-            ..loop = true
+            ..loop = _loopSound
             ..volume = 1.0;
       _audio = audio;
       // 브라우저는 사용자가 한 번이라도 조작한 뒤에만 소리를 허용한다.
@@ -305,7 +333,7 @@ class AlertCenter {
   }
 }
 
-class _AlertDialog extends StatelessWidget {
+class _AlertDialog extends StatefulWidget {
   final String kind;
   final String title;
   final String body;
@@ -321,14 +349,67 @@ class _AlertDialog extends StatelessWidget {
     this.docId,
   });
 
-  bool get isFall => kind == 'fall';
+  @override
+  State<_AlertDialog> createState() => _AlertDialogState();
+}
 
-  Color get accent => isFall ? AppColors.danger : AppColors.warn;
+class _AlertDialogState extends State<_AlertDialog> {
+  final TextEditingController _site = TextEditingController();
 
+  bool get isPressure => widget.kind == 'pressure';
 
+  /// 종류마다 색을 따로 적지 않는다. 늘어날 때마다 분기를 고치면
+  /// 어느 화면에서는 옛 색이 남는다.
+  Color get accent => NotificationKind.of(widget.kind).color;
+
+  @override
+  void dispose() {
+    _site.dispose();
+    super.dispose();
+  }
+
+  /// 확인을 눌렀을 때. 부위를 적었으면 같이 남긴다.
+  ///
+  /// 어느 것도 기다리지 않는다. 눌렀으면 바로 닫혀야 한다 — 네트워크가
+  /// 느리다고 경보음이 이어지면 누른 사람은 고장으로 여긴다.
+  void _confirm() {
+    final id = widget.docId;
+    if (id != null) {
+      if (isPressure) PressureSite.save(id, _site.text);
+      AlertCenter._ack(id);
+    }
+    Navigator.pop(context);
+  }
+
+  /// 그 순간 매트리스 그림. 빨간 칸이 기준 시간을 넘긴 자리다.
+  ///
+  /// 경보와 따로 올라오므로 팝업이 먼저 뜰 수 있다. live 로 구독해 두고
+  /// 도착하면 채운다.
+  Widget _snapshotView() {
+    final id = widget.docId;
+    if (id == null) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        PressureSnapshot(docId: id, width: 96, height: 192, live: true),
+        const SizedBox(height: 8),
+        const Text(
+          '빨간 칸이 오래 눌린 자리입니다',
+          style: TextStyle(
+            color: AppColors.inkDim,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final kind = widget.kind;
+    final title = widget.title;
+    final body = widget.body;
     return PopScope(
       // 확인을 누르기 전에는 닫히지 않는다. 뒤로가기로도 못 넘긴다.
       canPop: false,
@@ -364,16 +445,37 @@ class _AlertDialog extends StatelessWidget {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
-                child: Text(
-                  body,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    height: 1.5,
+              // 욕창은 그림과 입력칸이 붙어 길어진다. 작은 폰에서 넘치면
+              // 확인 버튼이 화면 밖으로 밀리므로 가운데만 스크롤시킨다.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            24, 22, 24, isPressure ? 16 : 20),
+                        child: Text(
+                          body,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                      if (isPressure) ...[
+                        _snapshotView(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+                          child: PressureSiteField(
+                            controller: _site,
+                            onChanged: () => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -410,15 +512,11 @@ class _AlertDialog extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    onPressed: () {
-                      // 확인 표시가 올라가기를 기다리지 않는다. 눌렀으면 바로
-                      // 닫혀야 한다 — 네트워크가 느리다고 경보음이 이어지면
-                      // 누른 사람은 고장으로 여긴다.
-                      final id = docId;
-                      if (id != null) AlertCenter._ack(id);
-                      Navigator.pop(context);
-                    },
-                    child: const Text('확인'),
+                    onPressed: _confirm,
+                    // 욕창은 부위를 함께 적으므로 무엇이 저장되는지 밝힌다.
+                    // 비워 두고 눌러도 닫힌다 — 급할 때 막히면 아예 안 적는
+                    // 쪽을 택하게 된다.
+                    child: Text(isPressure ? '저장 후 확인' : '확인'),
                   ),
                 ),
               ),
