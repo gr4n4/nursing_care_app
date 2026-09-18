@@ -389,19 +389,13 @@ class _AlertDialogState extends State<_AlertDialog> {
     final id = widget.docId;
     if (id == null) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        PressureSnapshot(docId: id, width: 96, height: 192, live: true),
-        const SizedBox(height: 8),
-        const Text(
-          '빨간 칸이 오래 눌린 자리입니다',
-          style: TextStyle(
-            color: AppColors.inkDim,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
+    // 그림이 아직 안 왔거나 없으면 설명까지 통째로 빠진다.
+    return PressureSnapshot(
+      docId: id,
+      width: 96,
+      height: 192,
+      live: true,
+      caption: '빨간 칸이 오래 눌린 자리입니다',
     );
   }
 

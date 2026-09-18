@@ -26,12 +26,20 @@ class PressureSnapshot extends StatefulWidget {
   /// 두고 도착하면 채운다. 지난 기록을 볼 때는 한 번만 읽으면 된다.
   final bool live;
 
+  /// 그림 아래에 붙일 설명.
+  ///
+  /// 부르는 쪽에서 따로 쓰지 않고 여기에 맡긴다. 그림이 없을 때 설명만
+  /// 남으면 "빨간 칸이 오래 눌린 자리입니다"만 떠서 무엇을 가리키는지
+  /// 알 수 없다. 둘이 같이 나타나고 같이 사라져야 한다.
+  final String? caption;
+
   const PressureSnapshot({
     super.key,
     required this.docId,
     required this.width,
     required this.height,
     this.live = false,
+    this.caption,
   });
 
   @override
@@ -97,7 +105,8 @@ class _PressureSnapshotState extends State<PressureSnapshot> {
 
   Widget _view(Uint8List? bytes) {
     if (bytes == null) return const SizedBox.shrink();
-    return ClipRRect(
+
+    final image = ClipRRect(
       borderRadius: BorderRadius.circular(widget.width > 60 ? 10 : 8),
       child: Container(
         color: const Color(0xFF0E0E10),
@@ -110,6 +119,26 @@ class _PressureSnapshotState extends State<PressureSnapshot> {
           errorBuilder: (_, _, _) => const SizedBox.shrink(),
         ),
       ),
+    );
+
+    final caption = widget.caption;
+    if (caption == null) return image;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        image,
+        const SizedBox(height: 8),
+        Text(
+          caption,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.inkDim,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -140,15 +169,11 @@ Future<void> showPressureSnapshot(
               ),
             ),
             const SizedBox(height: 14),
-            PressureSnapshot(docId: docId, width: 192, height: 384),
-            const SizedBox(height: 10),
-            const Text(
-              '빨간 칸이 오래 눌린 자리입니다',
-              style: TextStyle(
-                color: AppColors.inkDim,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
+            PressureSnapshot(
+              docId: docId,
+              width: 192,
+              height: 384,
+              caption: '빨간 칸이 오래 눌린 자리입니다',
             ),
             const SizedBox(height: 14),
             SizedBox(
