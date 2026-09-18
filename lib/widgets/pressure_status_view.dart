@@ -84,9 +84,18 @@ class PressureStatusView extends StatelessWidget {
     final minutes = data['criticalTime'];
     final sensors = (data['sensors'] as List<dynamic>?) ?? const [];
     final total = sensors.length;
-    final offline = sensors
-        .where((s) => (s as Map)['connected'] == false)
-        .length;
+
+    // connected 는 세 가지다 — true/false/null.
+    //
+    // null 은 "서버는 아는 센서인데 아직 한 번도 접속하지 않음"이다. 라즈베리
+    // 파이를 안 켰거나 네트워크가 안 닿는 경우가 여기 해당한다. false 만
+    // 끊김으로 세면 그 센서가 '연결됨'으로 보여, 감시가 시작조차 안 됐는데
+    // 괜찮은 줄 알게 된다. 병동에서 제일 위험한 오표시라 따로 센다.
+    final offline =
+        sensors.where((s) => (s as Map)['connected'] == false).length;
+    final unknown =
+        sensors.where((s) => (s as Map)['connected'] == null).length;
+    final ok = total - offline - unknown;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,12 +106,13 @@ class PressureStatusView extends StatelessWidget {
           child: Divider(height: 1, thickness: 1, color: AppColors.line),
         ),
         _line(
-          '연결된 센서',
-          total == 0
-              ? '없음'
-              : (offline == 0 ? '$total대 모두 연결됨' : '$total대 · $offline대 끊김'),
-          // 끊긴 센서는 감시가 멈춘 것이라 눈에 띄어야 한다.
-          valueColor: offline > 0 ? AppColors.danger : null,
+          '센서',
+          _sensorText(total, ok, offline, unknown),
+          // 끊긴 센서는 감시가 멈춘 것, 알 수 없는 센서는 시작조차 안 된
+          // 것이다. 둘 다 눈에 띄어야 한다.
+          valueColor: offline > 0
+              ? AppColors.danger
+              : (unknown > 0 ? AppColors.warn : null),
         ),
         const SizedBox(height: 9),
         Row(
@@ -129,6 +139,21 @@ class PressureStatusView extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// '5대 모두 연결됨' / '5대 · 1대 끊김' / '5대 · 2대 확인 중'.
+  ///
+  /// 끊김과 확인 중을 모두 적는다. 둘의 뜻이 다르다 — 끊김은 돌던 것이
+  /// 멈춘 것이고, 확인 중은 아직 시작도 안 된 것이다.
+  String _sensorText(int total, int ok, int offline, int unknown) {
+    if (total == 0) return '없음';
+    if (offline == 0 && unknown == 0) return '$total대 모두 연결됨';
+    final parts = [
+      if (ok > 0) '$ok대 연결됨',
+      if (offline > 0) '$offline대 끊김',
+      if (unknown > 0) '$unknown대 확인 중',
+    ];
+    return '$total대 · ${parts.join(' · ')}';
   }
 
   String _threshold(Object? pressure, Object? minutes) {
