@@ -106,17 +106,26 @@ class _PressureSnapshotState extends State<PressureSnapshot> {
   Widget _view(Uint8List? bytes) {
     if (bytes == null) return const SizedBox.shrink();
 
-    final image = ClipRRect(
-      borderRadius: BorderRadius.circular(widget.width > 60 ? 10 : 8),
-      child: Container(
-        color: const Color(0xFF0E0E10),
-        child: Image.memory(
-          bytes,
-          width: widget.width,
-          height: widget.height,
-          filterQuality: FilterQuality.none,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    // 센서가 보내는 그림은 세로다(32칸 x 64칸, 머리가 위). 그대로 쓰면
+    // 팝업과 목록에서 길쭉해 자리를 많이 먹는다. 눕혀서 머리를 왼쪽으로
+    // 둔다 — 침대를 옆에서 보는 모양이라 폭이 넓은 화면에 잘 맞는다.
+    //
+    // RotatedBox 는 자리도 같이 돌려 주므로(세로 96x192 -> 가로 192x96)
+    // 부르는 쪽은 원래 세로 크기를 그대로 넘기면 된다.
+    final image = RotatedBox(
+      quarterTurns: 3,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(widget.width > 60 ? 10 : 8),
+        child: Container(
+          color: const Color(0xFF0E0E10),
+          child: Image.memory(
+            bytes,
+            width: widget.width,
+            height: widget.height,
+            filterQuality: FilterQuality.none,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
         ),
       ),
     );
@@ -169,10 +178,12 @@ Future<void> showPressureSnapshot(
               ),
             ),
             const SizedBox(height: 14),
+            // 눕혀서 그리므로 가로 372 x 세로 186 으로 자리를 잡는다.
+            // 창 너비 420 에서 좌우 여백을 뺀 값에 맞췄다.
             PressureSnapshot(
               docId: docId,
-              width: 192,
-              height: 384,
+              width: 186,
+              height: 372,
               caption: '빨간 칸이 오래 눌린 자리입니다',
             ),
             const SizedBox(height: 14),

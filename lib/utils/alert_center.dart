@@ -390,10 +390,11 @@ class _AlertDialogState extends State<_AlertDialog> {
     if (id == null) return const SizedBox.shrink();
 
     // 그림이 아직 안 왔거나 없으면 설명까지 통째로 빠진다.
+    // 눕혀서 그리므로 가로 240 x 세로 120 이 된다 — 팝업 폭(310)에 맞춘 값.
     return PressureSnapshot(
       docId: id,
-      width: 96,
-      height: 192,
+      width: 120,
+      height: 240,
       live: true,
       caption: '빨간 칸이 오래 눌린 자리입니다',
     );
