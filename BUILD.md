@@ -38,6 +38,7 @@ git push origin v2.1.0
 | `v2.1.0` | 2026-09-10 | 물품 배송 요청·배차 화면 추가 |
 | `v2.2.0` | 2026-09-18 | 경보 확인 동기화 + 욕창 경보 받기 |
 | `v2.3.0` | 2026-09-29 | 엑셀에 경보 시트 둘 추가 + 욕창 푸시 아이콘 |
+| `v2.3.1` | 2026-09-29 | 엑셀 내려받기가 wasm 빌드에서 죽던 것 수정 |
 
 > `v2.1.0` 은 배포한 뒤 태그를 빠뜨려 2026-09-17 에 뒤늦게 달았다. 어느
 > 코드가 나갔는지는 `build/web/version.json`(2.1.0+4)과 `.firebase` 배포
@@ -56,6 +57,23 @@ git push origin v2.1.0
 `--wasm` 은 두 벌을 모두 만들어 두고, 브라우저가 WasmGC 를 지원하면 가벼운
 쪽을, 아니면 JS 쪽을 자동으로 고른다. 그래서 구형 브라우저에서도 안전하다.
 실행 속도도 wasm 쪽이 빠르다.
+
+## 엑셀은 우리가 직접 만든다
+
+`excel` 패키지를 쓰지 않는다. 그쪽은 새 파일을 만들 때 패키지에 박아 둔
+템플릿 xlsx 를 **풀어서** 읽는데, 그 압축 해제가 `--wasm` 빌드에서 죽는다.
+archive 3.6.1 의 inflateBuffer 가 `dart.library.io` / `dart.library.js` 로만
+갈라져 있어서다 — wasm 에는 둘 다 없어 stub 으로 떨어진다.
+
+    내보내기 실패: Unsupported operation: inflateBuffer requires html or io.
+
+최신 브라우저는 wasm 쪽을 받으므로 병동에서는 늘 이 오류가 났고, 구형
+브라우저(JS 쪽)에서만 되고 있었다. `lib/utils/xlsx.dart` 가 xlsx 를 직접
+만든다 — 푸는 일이 없고 zip 압축은 순수 Dart 라 wasm 에서 돈다.
+
+archive 4.x 는 이 문제를 고쳤지만 excel 4.0.6 이 archive ^3.6.1 로 묶어
+두고, 억지로 올리면 없어진 API(`decodeBuffer`, `compress`)에서 컴파일이
+깨진다. 그래서 직접 만드는 쪽을 골랐다.
 
 ## 배포 전 확인
 

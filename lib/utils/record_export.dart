@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:excel/excel.dart';
 import 'package:web/web.dart' as web;
 
 import 'care_date.dart';
+import 'xlsx.dart';
 
 /// 하루치 섭취·배설 기록을 엑셀로 내보낸다.
 ///
@@ -51,30 +51,24 @@ class RecordExport {
   static Future<List<int>> _buildWorkbook(String dateKey) async {
     final data = await _loadDay(dateKey);
 
-    final excel = Excel.createExcel();
-    // 기본으로 생기는 빈 시트 이름을 우리 것으로 바꾸고, 두 번째 시트를 추가한다.
-    final formName = '기록지';
-    final detailName = '상세내역';
-    excel.rename(excel.getDefaultSheet()!, formName);
-
-    _writeFormSheet(excel[formName], dateKey, data);
-    _writeDetailSheet(excel[detailName], dateKey, data);
-    _writePressureSheet(excel['욕창 위험'], dateKey, data);
-    _writeAlertSheet(excel['낙상·걸터앉음'], dateKey, data);
-
-    return excel.encode() ?? <int>[];
+    final book = XlsxWorkbook();
+    _writeFormSheet(book.addSheet('기록지'), dateKey, data);
+    _writeDetailSheet(book.addSheet('상세내역'), dateKey, data);
+    _writePressureSheet(book.addSheet('욕창 위험'), dateKey, data);
+    _writeAlertSheet(book.addSheet('낙상·걸터앉음'), dateKey, data);
+    return book.encode();
   }
 
   static void _writeFormSheet(
-    Sheet sheet,
+    XlsxSheet sheet,
     String dateKey,
     _DayData data,
   ) {
     // 양식의 2단 머리글(섭취량 / 배설량)을 흉내내되, 표계산에서 다루기 쉽도록
     // 각 열에 온전한 이름을 준다. 병합 머리글은 필터·정렬을 방해한다.
-    sheet.appendRow(_text(['섭취·배설 기록지  ·  $dateKey  (하루 기준 오전 7시)']));
-    sheet.appendRow(_text([]));
-    sheet.appendRow(_text([
+    sheet.addTextRow((['섭취·배설 기록지  ·  $dateKey  (하루 기준 오전 7시)']));
+    sheet.addTextRow(([]));
+    sheet.addTextRow(([
       '병실',
       '환자명',
       '섭취-튜브(ml)',
@@ -94,35 +88,35 @@ class RecordExport {
     ]));
 
     for (final p in data.patients) {
-      sheet.appendRow([
-        TextCellValue(p.room),
-        TextCellValue(p.name),
-        IntCellValue(p.tubeMl),
-        IntCellValue(p.oralMl),
-        IntCellValue(p.ivMl),
-        IntCellValue(p.intakeTotalMl),
-        IntCellValue(p.naturalMl),
-        IntCellValue(p.catheterMl),
-        IntCellValue(p.incontinenceMl),
-        IntCellValue(p.diaperGram),
-        IntCellValue(p.outputTotalMl),
-        IntCellValue(p.stoolCount),
-        IntCellValue(p.stoolGram),
-        IntCellValue(p.intakeTotalMl - p.outputTotalMl),
-        TextCellValue(p.edema > 0 ? '+${p.edema}' : ''),
-        TextCellValue(p.stoolType > 0 ? 'Type ${p.stoolType}' : ''),
+      sheet.addRow([
+        XlsxCell.text(p.room),
+        XlsxCell.text(p.name),
+        XlsxCell.number(p.tubeMl),
+        XlsxCell.number(p.oralMl),
+        XlsxCell.number(p.ivMl),
+        XlsxCell.number(p.intakeTotalMl),
+        XlsxCell.number(p.naturalMl),
+        XlsxCell.number(p.catheterMl),
+        XlsxCell.number(p.incontinenceMl),
+        XlsxCell.number(p.diaperGram),
+        XlsxCell.number(p.outputTotalMl),
+        XlsxCell.number(p.stoolCount),
+        XlsxCell.number(p.stoolGram),
+        XlsxCell.number(p.intakeTotalMl - p.outputTotalMl),
+        XlsxCell.text(p.edema > 0 ? '+${p.edema}' : ''),
+        XlsxCell.text(p.stoolType > 0 ? 'Type ${p.stoolType}' : ''),
       ]);
     }
   }
 
   static void _writeDetailSheet(
-    Sheet sheet,
+    XlsxSheet sheet,
     String dateKey,
     _DayData data,
   ) {
-    sheet.appendRow(_text(['상세 내역  ·  $dateKey']));
-    sheet.appendRow(_text([]));
-    sheet.appendRow(_text([
+    sheet.addTextRow((['상세 내역  ·  $dateKey']));
+    sheet.addTextRow(([]));
+    sheet.addTextRow(([
       '병실',
       '환자명',
       '시간',
@@ -135,16 +129,16 @@ class RecordExport {
     ]));
 
     for (final row in data.details) {
-      sheet.appendRow([
-        TextCellValue(row.room),
-        TextCellValue(row.name),
-        TextCellValue(row.time),
-        TextCellValue(row.kind),
-        TextCellValue(row.category),
-        TextCellValue(row.item),
-        row.amount == null ? TextCellValue('') : IntCellValue(row.amount!),
-        TextCellValue(row.unit),
-        TextCellValue(row.note),
+      sheet.addRow([
+        XlsxCell.text(row.room),
+        XlsxCell.text(row.name),
+        XlsxCell.text(row.time),
+        XlsxCell.text(row.kind),
+        XlsxCell.text(row.category),
+        XlsxCell.text(row.item),
+        row.amount == null ? XlsxCell.text('') : XlsxCell.number(row.amount!),
+        XlsxCell.text(row.unit),
+        XlsxCell.text(row.note),
       ]);
     }
   }
@@ -154,62 +148,59 @@ class RecordExport {
   /// 부위와 확인자를 같이 싣는다. 경보가 났다는 것만으로는 기록이 되지 않고,
   /// "어디였고 누가 갔는지"가 있어야 나중에 되짚을 수 있다.
   static void _writePressureSheet(
-    Sheet sheet,
+    XlsxSheet sheet,
     String dateKey,
     _DayData data,
   ) {
-    sheet.appendRow(_text(['욕창 위험 경보  ·  $dateKey']));
-    sheet.appendRow(_text([]));
-    sheet.appendRow(_text(
+    sheet.addTextRow((['욕창 위험 경보  ·  $dateKey']));
+    sheet.addTextRow(([]));
+    sheet.addTextRow((
         ['시간', '대상', '위험 셀', '부위', '확인자', '확인 시각']));
 
     if (data.pressureAlerts.isEmpty) {
-      sheet.appendRow(_text(['(이 날 욕창 경보 없음)']));
+      sheet.addTextRow((['(이 날 욕창 경보 없음)']));
       return;
     }
 
     for (final a in data.pressureAlerts) {
-      sheet.appendRow([
-        TextCellValue(a.time),
-        TextCellValue(a.who),
-        a.cells == null ? TextCellValue('') : IntCellValue(a.cells!),
-        TextCellValue(a.site),
-        TextCellValue(a.ackBy),
-        TextCellValue(a.ackTime),
+      sheet.addRow([
+        XlsxCell.text(a.time),
+        XlsxCell.text(a.who),
+        a.cells == null ? XlsxCell.text('') : XlsxCell.number(a.cells!),
+        XlsxCell.text(a.site),
+        XlsxCell.text(a.ackBy),
+        XlsxCell.text(a.ackTime),
       ]);
     }
   }
 
   /// 시트4 — 레이더가 올린 낙상·걸터앉음 경보.
   static void _writeAlertSheet(
-    Sheet sheet,
+    XlsxSheet sheet,
     String dateKey,
     _DayData data,
   ) {
-    sheet.appendRow(_text(['낙상·걸터앉음 경보  ·  $dateKey']));
-    sheet.appendRow(_text([]));
-    sheet.appendRow(_text(
+    sheet.addTextRow((['낙상·걸터앉음 경보  ·  $dateKey']));
+    sheet.addTextRow(([]));
+    sheet.addTextRow((
         ['시간', '종류', '병실', '환자명', '확인자', '확인 시각']));
 
     if (data.sensorAlerts.isEmpty) {
-      sheet.appendRow(_text(['(이 날 낙상·걸터앉음 경보 없음)']));
+      sheet.addTextRow((['(이 날 낙상·걸터앉음 경보 없음)']));
       return;
     }
 
     for (final a in data.sensorAlerts) {
-      sheet.appendRow([
-        TextCellValue(a.time),
-        TextCellValue(a.kindKo),
-        TextCellValue(a.room),
-        TextCellValue(a.name),
-        TextCellValue(a.ackBy),
-        TextCellValue(a.ackTime),
+      sheet.addRow([
+        XlsxCell.text(a.time),
+        XlsxCell.text(a.kindKo),
+        XlsxCell.text(a.room),
+        XlsxCell.text(a.name),
+        XlsxCell.text(a.ackBy),
+        XlsxCell.text(a.ackTime),
       ]);
     }
   }
-
-  static List<CellValue?> _text(List<String> values) =>
-      values.map<CellValue?>((v) => TextCellValue(v)).toList();
 
   // ---------- 데이터 읽기 ----------
 
