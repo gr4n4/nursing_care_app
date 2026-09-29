@@ -46,3 +46,21 @@ String wallClockTime(DateTime dt) {
   return '${dt.hour.toString().padLeft(2, '0')}:'
       '${dt.minute.toString().padLeft(2, '0')}';
 }
+
+/// 간호일 키(예: 2026-09-29)가 실제로 덮는 시각 구간의 시작.
+///
+/// 기록류는 문서에 date 필드가 있어 키로 바로 찾지만, 알림 기록에는 발송
+/// 시각(sentAt)뿐이라 구간으로 걸러야 한다. 그때 쓴다.
+DateTime careDayStart(String dateKey) {
+  final p = dateKey.split('-');
+  return DateTime(
+    int.parse(p[0]),
+    int.parse(p[1]),
+    int.parse(p[2]),
+    careDayStartHour,
+  );
+}
+
+/// 그 구간의 끝(다음날 07:00). 끝은 포함하지 않는다.
+DateTime careDayEnd(String dateKey) =>
+    careDayStart(dateKey).add(const Duration(days: 1));

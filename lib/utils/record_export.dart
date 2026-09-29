@@ -14,6 +14,11 @@ import 'care_date.dart';
 /// 그대로 따른다. 시트를 둘로 나눈 이유:
 ///   시트1 '기록지'  = 환자별 하루 합계. 메디로에 그대로 옮겨 적는 용도.
 ///   시트2 '상세내역' = 무엇을 얼마나 먹고 쌌는지 한 건씩. 값이 이상할 때 근거 확인용.
+///   시트3 '욕창 위험'  = 압력 센서 경보. 어디가 눌렸고 누가 확인했는지.
+///   시트4 '낙상·걸터앉음' = 레이더 경보.
+///
+/// 경보를 같이 넣는 이유: 그날 무슨 일이 있었는지 묻는 자리에서 섭취·배설만
+/// 들고 가면 "그날 낙상 있었죠?"에 답할 수 없다. 한 파일에 있어야 한다.
 class RecordExport {
   /// 여러 날짜를 고르면 날짜별로 파일을 하나씩 만들어 zip으로 묶는다.
   /// 한 파일에 여러 날을 몰아넣으면 메디로에 옮길 때 날짜를 골라내야 해서 번거롭다.
@@ -54,6 +59,8 @@ class RecordExport {
 
     _writeFormSheet(excel[formName], dateKey, data);
     _writeDetailSheet(excel[detailName], dateKey, data);
+    _writePressureSheet(excel['욕창 위험'], dateKey, data);
+    _writeAlertSheet(excel['낙상·걸터앉음'], dateKey, data);
 
     return excel.encode() ?? <int>[];
   }
@@ -142,6 +149,65 @@ class RecordExport {
     }
   }
 
+  /// 시트3 — 압력 센서가 올린 욕창 위험 경보.
+  ///
+  /// 부위와 확인자를 같이 싣는다. 경보가 났다는 것만으로는 기록이 되지 않고,
+  /// "어디였고 누가 갔는지"가 있어야 나중에 되짚을 수 있다.
+  static void _writePressureSheet(
+    Sheet sheet,
+    String dateKey,
+    _DayData data,
+  ) {
+    sheet.appendRow(_text(['욕창 위험 경보  ·  $dateKey']));
+    sheet.appendRow(_text([]));
+    sheet.appendRow(_text(
+        ['시간', '대상', '위험 셀', '부위', '확인자', '확인 시각']));
+
+    if (data.pressureAlerts.isEmpty) {
+      sheet.appendRow(_text(['(이 날 욕창 경보 없음)']));
+      return;
+    }
+
+    for (final a in data.pressureAlerts) {
+      sheet.appendRow([
+        TextCellValue(a.time),
+        TextCellValue(a.who),
+        a.cells == null ? TextCellValue('') : IntCellValue(a.cells!),
+        TextCellValue(a.site),
+        TextCellValue(a.ackBy),
+        TextCellValue(a.ackTime),
+      ]);
+    }
+  }
+
+  /// 시트4 — 레이더가 올린 낙상·걸터앉음 경보.
+  static void _writeAlertSheet(
+    Sheet sheet,
+    String dateKey,
+    _DayData data,
+  ) {
+    sheet.appendRow(_text(['낙상·걸터앉음 경보  ·  $dateKey']));
+    sheet.appendRow(_text([]));
+    sheet.appendRow(_text(
+        ['시간', '종류', '병실', '환자명', '확인자', '확인 시각']));
+
+    if (data.sensorAlerts.isEmpty) {
+      sheet.appendRow(_text(['(이 날 낙상·걸터앉음 경보 없음)']));
+      return;
+    }
+
+    for (final a in data.sensorAlerts) {
+      sheet.appendRow([
+        TextCellValue(a.time),
+        TextCellValue(a.kindKo),
+        TextCellValue(a.room),
+        TextCellValue(a.name),
+        TextCellValue(a.ackBy),
+        TextCellValue(a.ackTime),
+      ]);
+    }
+  }
+
   static List<CellValue?> _text(List<String> values) =>
       values.map<CellValue?>((v) => TextCellValue(v)).toList();
 
@@ -198,6 +264,15 @@ class RecordExport {
       db.collection('water_records').where('date', isEqualTo: dateKey).get(),
       db.collection('output_records').where('date', isEqualTo: dateKey).get(),
       db.collection('daily_assessments').where('date', isEqualTo: dateKey).get(),
+      // 알림 기록에는 date 필드가 없고 발송 시각(sentAt)뿐이라 구간으로 찾는다.
+      // 한 필드 범위 조건이라 복합 색인이 필요 없다.
+      db
+          .collection('notification_log')
+          .where('sentAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(careDayStart(dateKey)))
+          .where('sentAt', isLessThan: Timestamp.fromDate(careDayEnd(dateKey)))
+          .orderBy('sentAt')
+          .get(),
     ]);
 
     final assessByPatient = <String, Map<String, dynamic>>{};
@@ -346,7 +421,59 @@ class RecordExport {
       return a.time.compareTo(b.time);
     });
 
-    return _DayData(patients: patients, details: details);
+    final pressureAlerts = <_PressureAlertRow>[];
+    final sensorAlerts = <_SensorAlertRow>[];
+
+    for (final doc in results[5].docs) {
+      final a = doc.data();
+      final kind = (a['kind'] ?? '').toString();
+      if (kind != 'pressure' && kind != 'fall' && kind != 'bedside') continue;
+
+      final sent = a['sentAt'];
+      final time = sent is Timestamp ? wallClockTime(sent.toDate()) : '';
+      final ackAt = a['ackedAt'];
+      final ackTime = ackAt is Timestamp ? wallClockTime(ackAt.toDate()) : '';
+      final ackName = (a['ackedByName'] ?? '').toString().trim();
+      final ackBy = ackName.isNotEmpty
+          ? ackName
+          : (a['ackedBy'] ?? '').toString().split('@').first;
+
+      if (kind == 'pressure') {
+        // 부위는 따로 적히므로(양쪽에서 적을 수 있다) 문서를 하나 더 읽는다.
+        // 하루에 몇 건뿐이라 읽기 비용이 문제되지 않는다.
+        var site = '';
+        try {
+          final s = await db.collection('pressure_sites').doc(doc.id).get();
+          site = (s.data()?['site'] ?? '').toString().trim();
+        } catch (_) {
+          // 부위를 못 읽어도 경보 자체는 내보낸다.
+        }
+        pressureAlerts.add(_PressureAlertRow(
+          time: time,
+          who: (a['room'] ?? '').toString(),
+          cells: a['cellCount'] is int ? a['cellCount'] as int : null,
+          site: site,
+          ackBy: ackBy,
+          ackTime: ackTime,
+        ));
+      } else {
+        sensorAlerts.add(_SensorAlertRow(
+          time: time,
+          kindKo: kind == 'fall' ? '낙상' : '걸터앉음',
+          room: (a['room'] ?? '').toString(),
+          name: (a['patientName'] ?? '').toString(),
+          ackBy: ackBy,
+          ackTime: ackTime,
+        ));
+      }
+    }
+
+    return _DayData(
+      patients: patients,
+      details: details,
+      pressureAlerts: pressureAlerts,
+      sensorAlerts: sensorAlerts,
+    );
   }
 
   // ---------- 브라우저 다운로드 ----------
@@ -379,8 +506,53 @@ class RecordExport {
 class _DayData {
   final List<_PatientRow> patients;
   final List<_DetailRow> details;
+  final List<_PressureAlertRow> pressureAlerts;
+  final List<_SensorAlertRow> sensorAlerts;
 
-  _DayData({required this.patients, required this.details});
+  _DayData({
+    required this.patients,
+    required this.details,
+    this.pressureAlerts = const [],
+    this.sensorAlerts = const [],
+  });
+}
+
+class _PressureAlertRow {
+  final String time;
+
+  /// 센서에 지어 준 이름(예: '421호 김복순'). 압력 쪽은 환자를 모른다.
+  final String who;
+  final int? cells;
+  final String site;
+  final String ackBy;
+  final String ackTime;
+
+  _PressureAlertRow({
+    required this.time,
+    required this.who,
+    required this.cells,
+    required this.site,
+    required this.ackBy,
+    required this.ackTime,
+  });
+}
+
+class _SensorAlertRow {
+  final String time;
+  final String kindKo;
+  final String room;
+  final String name;
+  final String ackBy;
+  final String ackTime;
+
+  _SensorAlertRow({
+    required this.time,
+    required this.kindKo,
+    required this.room,
+    required this.name,
+    required this.ackBy,
+    required this.ackTime,
+  });
 }
 
 class _PatientRow {
