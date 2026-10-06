@@ -211,6 +211,22 @@ class RecordExport {
     return 0;
   }
 
+  static double _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
+    return 0;
+  }
+
+  /// 앱에서 고른 그대로 적는다(0 · 1/4 · 1/3 · 1/2 · 전체).
+  /// 0.33 같은 숫자로 적으면 간호사가 무엇을 눌렀는지 알아보기 어렵다.
+  static String _ratioKo(double r) {
+    if (r >= 0.999) return '전체';
+    if ((r - 0.5).abs() < 0.01) return '1/2';
+    if ((r - 0.33).abs() < 0.02) return '1/3';
+    if ((r - 0.25).abs() < 0.01) return '1/4';
+    return '${(r * 100).round()}%';
+  }
+
   static String _mealKo(String t) {
     if (t == 'breakfast') return '아침';
     if (t == 'lunch') return '점심';
@@ -296,17 +312,39 @@ class RecordExport {
         final fluid = _toInt(d['totalFluidMl']);
         oralMl += fluid;
 
-        details.add(_DetailRow(
-          room: room,
-          name: name,
-          time: (d['time'] ?? '').toString(),
-          kind: '섭취',
-          category: '식사',
-          item: _mealKo((d['mealType'] ?? '').toString()),
-          amount: fluid,
-          unit: 'ml',
-          note: '식사 ${_toInt(d['totalFoodGram'])}g',
-        ));
+        // 한 끼를 한 줄로 합치면 "밥을 얼마나 먹어서 수분이 얼마"인지 알 수
+        // 없다. 상세내역은 값이 이상할 때 근거를 보는 곳이므로 주식·국·반찬을
+        // 따로 편다. 안 먹은 칸(비율 0, 종류 '없음')은 넣지 않는다.
+        final meal = _mealKo((d['mealType'] ?? '').toString());
+        final time = (d['time'] ?? '').toString();
+
+        void part(String item, dynamic ratio, dynamic gram, dynamic waterMl) {
+          final r = _toDouble(ratio);
+          if (r <= 0) return;
+          final g = _toInt(gram);
+          details.add(_DetailRow(
+            room: room,
+            name: name,
+            time: time,
+            kind: '섭취',
+            category: meal,
+            item: item,
+            amount: _toInt(waterMl),
+            unit: 'ml',
+            note: g > 0 ? '${_ratioKo(r)} · ${g}g' : _ratioKo(r),
+          ));
+        }
+
+        final staple = (d['stapleType'] ?? '').toString();
+        part(staple.isEmpty ? '주식' : '주식 $staple', d['stapleRatio'],
+            d['stapleGram'], d['stapleWaterMl']);
+        part('국', d['soupRatio'], d['soupServingGram'], d['soupWaterMl']);
+        for (var i = 1; i <= 4; i++) {
+          final type = (d['side${i}Type'] ?? '').toString();
+          if (type.isEmpty || type == '없음') continue;
+          part('반찬 $type', d['side${i}Ratio'], d['side${i}Gram'],
+              d['side${i}WaterMl']);
+        }
       }
 
       for (final w in results[2].docs) {
