@@ -64,3 +64,15 @@ DateTime careDayStart(String dateKey) {
 /// 그 구간의 끝(다음날 07:00). 끝은 포함하지 않는다.
 DateTime careDayEnd(String dateKey) =>
     careDayStart(dateKey).add(const Duration(days: 1));
+
+/// 달력에서 고른 날짜를 그대로 간호일 키로 만든다.
+///
+/// careDateKey 는 '시각'을 받아 그 시각이 어느 간호일에 속하는지 가려내는
+/// 함수다. 달력에서 고른 날짜는 자정(00:00)으로 오는데, 자정은 7시간을 빼면
+/// 전날이라 9월 30일을 고르면 9월 29일 자료를 찾게 된다.
+///
+/// 고른 날짜는 이미 '그 간호일'을 가리키는 값이므로 빼지 않고 그대로 쓴다.
+String careDateKeyOfDay(DateTime day) =>
+    '${day.year}-'
+    '${day.month.toString().padLeft(2, '0')}-'
+    '${day.day.toString().padLeft(2, '0')}';

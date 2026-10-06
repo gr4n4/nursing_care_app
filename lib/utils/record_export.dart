@@ -26,7 +26,7 @@ class RecordExport {
     if (dates.isEmpty) return;
 
     if (dates.length == 1) {
-      final key = careDateKey(dates.first);
+      final key = careDateKeyOfDay(dates.first);
       final bytes = await _buildWorkbook(key);
       _download('NRCarec_섭취배설_$key.xlsx', bytes);
       return;
@@ -34,15 +34,15 @@ class RecordExport {
 
     final archive = Archive();
     for (final d in dates) {
-      final key = careDateKey(d);
+      final key = careDateKeyOfDay(d);
       final bytes = await _buildWorkbook(key);
       archive.addFile(ArchiveFile('NRCarec_섭취배설_$key.xlsx', bytes.length, bytes));
     }
 
     final zipped = ZipEncoder().encode(archive);
     if (zipped == null) return;
-    final first = careDateKey(dates.first);
-    final last = careDateKey(dates.last);
+    final first = careDateKeyOfDay(dates.first);
+    final last = careDateKeyOfDay(dates.last);
     _download('NRCarec_섭취배설_${first}_$last.zip', zipped);
   }
 

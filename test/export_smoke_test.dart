@@ -55,6 +55,18 @@ void main() {
     expect(XlsxWorkbook.columnName(52), 'BA');
   });
 
+  test('달력에서 고른 날짜는 빼지 않고 그대로 키가 된다', () {
+    // 달력은 자정을 준다. careDateKey 로 넘기면 7시간을 빼서 전날이 되고,
+    // 9월 30일을 골라도 9월 29일 자료를 찾아 전부 0 으로 나온다.
+    final picked = DateTime(2026, 9, 30);
+    expect(careDateKeyOfDay(picked), '2026-09-30');
+    expect(careDateKey(picked), '2026-09-29', reason: '이래서 그대로 쓰면 안 된다');
+
+    // 실제 시각을 넘기는 쪽(기록 입력 화면 등)은 지금처럼 careDateKey 가 맞다.
+    expect(careDateKey(DateTime(2026, 9, 30, 14, 19)), '2026-09-30');
+    expect(careDateKey(DateTime(2026, 9, 30, 3, 0)), '2026-09-29');
+  });
+
   test('간호일 구간은 07시에 시작해 다음날 07시에 끝난다', () {
     // 경보는 date 필드가 없어 이 구간으로 걸러 내보낸다. 경계가 어긋나면
     // 새벽 경보가 엉뚱한 날짜 파일에 들어간다.
