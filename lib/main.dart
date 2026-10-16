@@ -273,7 +273,13 @@ class _AuthGateState extends State<AuthGate> {
 
     // 좁은 화면(폰/홈화면 PWA)은 간호사 입력 앱, 넓은 화면(데스크톱)은 대시보드로.
     if (role == 'nurse') {
-      if (!wide) return const NurseHomePage();
+      if (!wide) {
+        // 폰도 지켜본다. 로봇이 병실 앞에 도착한 것을 폰에서 알아야 복도에
+        // 있는 사람이 [수령 완료] 를 누를 수 있다. 스테이션에서만 누를 수
+        // 있으면 받는 사람이 그걸 누르러 스테이션까지 걸어가야 한다.
+        DeliveryWatcher.start(CareNoteApp.navigatorKey, announce: false);
+        return const NurseHomePage();
+      }
       DeliveryWatcher.start(CareNoteApp.navigatorKey);
       return const StationPage();
     }

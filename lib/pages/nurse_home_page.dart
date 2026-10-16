@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../theme/app_colors.dart';
 import '../utils/care_date.dart';
+import '../utils/delivery_watcher.dart';
 import '../widgets/notification_bell.dart';
 import 'delivery_request_page.dart';
+import 'delivery_status_page.dart';
 import 'input_choice_page.dart';
 import 'login_page.dart';
 import 'nurse_profile_edit_page.dart';
@@ -1107,6 +1110,50 @@ class _NurseHomePageState extends State<NurseHomePage> {
     );
   }
 
+  /// 진행 중인 배송을 보러 가는 버튼.
+  ///
+  /// 진행 중인 것이 없으면 아예 뜨지 않는다. 늘 띄워 두면 평소에 아무 일도
+  /// 없는 버튼이 되어, 정작 눌러야 할 때도 눈에 안 들어온다.
+  Widget deliveryStatusFab() {
+    return ValueListenableBuilder<int>(
+      valueListenable: DeliveryWatcher.active,
+      builder: (context, active, _) {
+        if (active == 0) return const SizedBox.shrink();
+        return ValueListenableBuilder<int>(
+          valueListenable: DeliveryWatcher.arrived,
+          builder: (context, arrived, _) {
+            // 로봇이 문 앞에 대 놓고 기다리는 건이 있으면 색을 채워 올린다.
+            // 아무도 안 누르면 로봇이 복도에 선 채로 다음 배송을 못 한다.
+            final waiting = arrived > 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: FloatingActionButton.extended(
+                heroTag: 'delivery_status_fab',
+                backgroundColor: waiting ? AppColors.ok : Colors.white,
+                foregroundColor: waiting ? Colors.white : mintDark,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DeliveryStatusPage(),
+                    ),
+                  );
+                },
+                icon: Icon(waiting
+                    ? Icons.inventory_2_rounded
+                    : Icons.local_shipping_outlined),
+                label: Text(
+                  waiting ? '수령 확인 $arrived건' : '배송 중 $active건',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -1135,21 +1182,28 @@ class _NurseHomePageState extends State<NurseHomePage> {
           backgroundColor: pageBg,
           // 환자와 무관한 물품 요청(처치실 거즈 등)을 위한 진입점.
           // 환자별 요청은 환자 상세에서 하는 편이 호실이 자동으로 채워져 빠르다.
-          floatingActionButton: FloatingActionButton.extended(
-            heroTag: 'delivery_request_fab',
-            backgroundColor: mintDark,
-            foregroundColor: Colors.white,
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const DeliveryRequestPage(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.local_shipping_rounded),
-            label: const Text('물품 요청',
-                style: TextStyle(fontWeight: FontWeight.w900)),
+          floatingActionButton: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              deliveryStatusFab(),
+              FloatingActionButton.extended(
+                heroTag: 'delivery_request_fab',
+                backgroundColor: mintDark,
+                foregroundColor: Colors.white,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DeliveryRequestPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.local_shipping_rounded),
+                label: const Text('물품 요청',
+                    style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ],
           ),
           body: SafeArea(
             bottom: false,

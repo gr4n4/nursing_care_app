@@ -26,6 +26,15 @@ class DeliveryWatcher {
   /// 아직 수락하지 않은 요청 수. 옆 메뉴 숫자에 쓴다.
   static final ValueNotifier<int> pending = ValueNotifier<int>(0);
 
+  /// 로봇이 병실 앞에 대 놓고 사람을 기다리는 건수.
+  ///
+  /// 이게 0 이 아니면 누군가 가서 [수령 완료] 를 눌러야 로봇이 돌아간다.
+  /// 안 누르면 로봇이 복도에 선 채로 다음 배송을 못 한다.
+  static final ValueNotifier<int> arrived = ValueNotifier<int>(0);
+
+  /// 지금 돌고 있는 배송 건수(요청부터 복귀 전까지).
+  static final ValueNotifier<int> active = ValueNotifier<int>(0);
+
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   /// 이미 본 요청. 화면을 열 때 쌓여 있던 것까지 소리내지 않으려고 쓴다.
@@ -38,21 +47,46 @@ class DeliveryWatcher {
 
   /// 대시보드가 열려 있는 동안만 지켜본다.
   ///
-  /// status 하나만 거르는 조회라 복합 색인이 필요 없고, 밀린 요청만 읽으므로
+  /// status 하나만 거르는 조회라 복합 색인이 필요 없고, 끝난 건은 빠지므로
   /// 평소에는 몇 건 되지 않는다.
-  static void start(GlobalKey<NavigatorState> navigatorKey) {
+  ///
+  /// [announce] 를 끄면 숫자만 세고 소리도 팝업도 내지 않는다. 폰이 그렇게
+  /// 쓴다 — 수락은 널스스테이션이 하는 일이라, 폰에서 남의 요청까지 울리면
+  /// 방해만 된다. 폰이 알아야 하는 건 '내가 가서 받을 것이 있는가'뿐이다.
+  static void start(
+    GlobalKey<NavigatorState> navigatorKey, {
+    bool announce = true,
+  }) {
     if (_sub != null) return;
 
+    // 진행 중인 것 전부를 본다. 한 필드(status) 조회라 복합 색인이 필요
+    // 없고, 끝난 건은 빠지므로 평소 몇 건 되지 않는다.
+    //
+    // 예전에는 requested 만 봤다. 그때는 널스스테이션의 '밀린 요청 수'만
+    // 쓰면 됐기 때문이다. 지금은 폰에서도 "도착했으니 가서 받으라"를
+    // 알려야 해서 delivered 까지 같이 센다.
     _sub = FirebaseFirestore.instance
         .collection('delivery_requests')
-        .where('status', isEqualTo: DeliveryStatus.requested)
+        .where('status', whereIn: DeliveryStatus.active.toList())
         .snapshots()
         .listen(
       (snap) {
-        pending.value = snap.docs.length;
+        var waiting = 0, atDoor = 0;
+        for (final doc in snap.docs) {
+          final st = (doc.data()['status'] ?? '').toString();
+          if (st == DeliveryStatus.requested) waiting++;
+          if (st == DeliveryStatus.delivered) atDoor++;
+        }
+        pending.value = waiting;
+        arrived.value = atDoor;
+        active.value = snap.docs.length;
 
+        // 소리와 팝업은 '새로 올라온 요청' 에만 쓴다. 진행 중인 건이
+        // 상태를 바꿀 때마다 울리면 한 건에 네 번 울린다.
         final fresh = <DeliveryRequest>[];
         for (final doc in snap.docs) {
+          final st = (doc.data()['status'] ?? '').toString();
+          if (st != DeliveryStatus.requested) continue;
           if (_seen.add(doc.id) && _primed) {
             fresh.add(DeliveryRequest.fromDoc(doc));
           }
@@ -60,13 +94,15 @@ class DeliveryWatcher {
 
         // 처리된 요청은 다시 '새 것'이 될 수 있어야 한다. 취소했다가 다시
         // 올린 경우까지 조용히 넘어가면 안 된다.
-        _seen.removeWhere((id) => !snap.docs.any((d) => d.id == id));
+        _seen.removeWhere((id) => !snap.docs.any((d) =>
+            d.id == id &&
+            (d.data()['status'] ?? '') == DeliveryStatus.requested));
 
         if (!_primed) {
           _primed = true;
           return;
         }
-        if (fresh.isNotEmpty) _announce(navigatorKey, fresh);
+        if (announce && fresh.isNotEmpty) _announce(navigatorKey, fresh);
       },
       onError: (Object e) {
         // 못 지켜봐도 배차 화면에서 직접 볼 수 있다. 대시보드를 막지 않는다.
@@ -81,6 +117,8 @@ class DeliveryWatcher {
     _seen.clear();
     _primed = false;
     pending.value = 0;
+    arrived.value = 0;
+    active.value = 0;
   }
 
   /// 팝업이 이미 떠 있는가. 요청이 잇달아 오면 창이 겹쳐 쌓인다.
