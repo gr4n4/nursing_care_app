@@ -15,6 +15,11 @@ import '../utils/feedback.dart';
 ///
 /// 요청자 본인만 누를 수 있게 하지 않는다. 요청한 간호사와 받는 간호사가
 /// 다른 일이 흔하고, 그때 로봇이 멈춰 서 있게 된다.
+///
+/// 실패(failed)는 여기 안 뜬다. 진행 중인 것만 조회하기 때문이다. 아직
+/// 로봇이 failed 를 쓰는 것을 본 적이 없어 일부러 열어 두지 않았다 —
+/// 실패한 건을 띄우면 지울 길이 없어 목록에 영영 남는다. 널스스테이션
+/// 배차 화면에서는 '끝난 요청' 쪽에 사유까지 보인다.
 class DeliveryStatusPage extends StatelessWidget {
   const DeliveryStatusPage({super.key});
 
@@ -253,17 +258,6 @@ class _CardState extends State<_Card> {
               ),
             ),
           ],
-          if (r.status == DeliveryStatus.failed && r.failReason.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              r.failReason,
-              style: const TextStyle(
-                color: AppColors.danger,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
           if (_arrived) ...[
             const SizedBox(height: 16),
             SizedBox(
@@ -326,7 +320,6 @@ class _CardState extends State<_Card> {
   static (Color, Color) _statusColors(String s) => switch (s) {
         DeliveryStatus.delivered => (AppColors.okBg, AppColors.ok),
         DeliveryStatus.requested => (AppColors.warnBg, AppColors.warn),
-        DeliveryStatus.failed => (AppColors.dangerBg, AppColors.danger),
         _ => (AppColors.brandSoft, AppColors.brand),
       };
 }
