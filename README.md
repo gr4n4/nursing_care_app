@@ -37,7 +37,7 @@ requested ─[수락]→ accepted ─[출발]→ delivering ─[수령 확인]�
                  at_loading           delivered             closed    ← 로봇이 찍는 값
 ```
 
-사람이 누르는 것은 `accepted` / `delivering` / `done` / `canceled` 뿐이고, 로봇 도착 상태는 Firestore 규칙에서 사람이 못 쓰게 막아 두었습니다. 품목은 `settings/delivery_items`에서 읽어 앱을 다시 배포하지 않고 바꿀 수 있습니다. 보낼 위치는 **로봇이 켜질 때 `settings/delivery_rooms`에 써 둔 "갈 수 있는 곳"** 만 고르게 해서, 로봇이 못 가는 곳으로 요청이 가지 않습니다.
+사람이 누르는 것은 `accepted` / `delivering` / `done` / `canceled` 뿐이고, 로봇 도착 상태는 Firestore 규칙에서 사람이 못 쓰게 막아 두었습니다. **[수령 완료]는 폰과 널스스테이션 양쪽에 있습니다** — 복도에서 물건을 받는 사람이 누르는 버튼이라, 스테이션에만 두면 받은 사람이 그걸 누르러 스테이션까지 걸어가야 하고 그동안 로봇이 복도에 서 있습니다. 품목은 `settings/delivery_items`에서 읽어 앱을 다시 배포하지 않고 바꿀 수 있습니다. 보낼 위치는 **로봇이 켜질 때 `settings/delivery_rooms`에 써 둔 "갈 수 있는 곳"** 만 고르게 해서, 로봇이 못 가는 곳으로 요청이 가지 않습니다.
 
 ### 특징
 - **음식별 수분함량 자동 계산** — 국립농업과학원의 1회 제공량·수분량 자료를 기준으로, 먹은 비율만큼 수분 섭취량을 자동 산출
@@ -105,7 +105,7 @@ lib/
 ├── utils/
 │   ├── care_date.dart            간호일(07:00 기준) 날짜 계산
 │   ├── alert_center.dart         낙상·걸터앉음 경보 수신 (소리 + 확인 팝업)
-│   ├── delivery_watcher.dart     새 배송 요청 감지 · 배차 메뉴 건수 표시
+│   ├── delivery_watcher.dart     새 배송 요청 감지 · 밀린/도착 건수 표시
 │   ├── push_messaging.dart       FCM 토큰 발급·등록
 │   ├── notification_kind.dart    알림 종류별 아이콘·색 규칙
 │   ├── record_export.dart        하루치 기록 엑셀 내보내기
@@ -132,6 +132,7 @@ lib/
     ├── notification_settings_page.dart 알림 규칙 설정
     ├── notification_log_page.dart    발송된 알림 기록
     ├── delivery_request_page.dart    물품 배송 요청 (모바일)
+    ├── delivery_status_page.dart     배송 현황 · 수령 완료 (모바일)
     └── delivery_dispatch_page.dart   로봇 배차 (웹)
 ```
 
@@ -152,6 +153,8 @@ lib/
 | `notification_log` | 발송된 알림 기록 | 스케줄러 · `emfit_server` |
 | `delivery_requests` | 물품 배송 요청 | 앱 · 로봇 브릿지 |
 | `robot_state` | 로봇 위치·가동 상태 (`current` 한 문서) | 로봇 브릿지 (앱은 읽기만) |
+
+`robot_state.updatedAt` 이 2분 넘게 안 바뀌면 끊긴 것으로 봅니다 — 로봇은 멈춰 있을 때도 60초마다 살아있음 신호를 씁니다. `poseOnAppMap` 이 `false` 면 좌표를 쓰지 않고 지도 이름만 보여 줍니다(지금 시험하는 연구소 지도와 병동 지도의 원점이 달라, 그대로 그리면 복도 밖에 찍힙니다).
 
 ---
 

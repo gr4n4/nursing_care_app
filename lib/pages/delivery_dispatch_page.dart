@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -150,9 +152,51 @@ class DeliveryDispatchPage extends StatelessWidget {
 /// 로봇이 살아 있는지, 지금 어디쯤인지.
 ///
 /// 브릿지가 robot_state/current 한 문서만 갱신한다. 30cm 이상 움직였을 때만
-/// 쓰기 때문에 무료 한도를 거의 먹지 않는다.
-class _RobotStatusBar extends StatelessWidget {
+/// 쓰고, 멈춰 있을 때는 60초마다 살아있음 신호만 쓴다. 그래서 무료 한도를
+/// 거의 먹지 않는다.
+///
+/// StatefulWidget 인 이유: 로봇이 조용히 죽으면 **새 문서가 안 온다**.
+/// 스트림만 보고 있으면 마지막 값('대기 중')이 화면에 그대로 굳어서, 죽은
+/// 로봇이 멀쩡해 보인다. 그래서 따로 시계를 돌려 신호가 끊긴 것을 알아챈다.
+class _RobotStatusBar extends StatefulWidget {
   const _RobotStatusBar();
+
+  @override
+  State<_RobotStatusBar> createState() => _RobotStatusBarState();
+}
+
+class _RobotStatusBarState extends State<_RobotStatusBar> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // 마감까지 남은 시간을 다시 재기만 한다. Firestore 를 읽지 않는다.
+    _tick = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  /// 브릿지는 ISO 8601 문자열로, 앱은 Timestamp 로 쓴다. 둘 다 받는다.
+  static DateTime? _time(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is String) return DateTime.tryParse(v)?.toLocal();
+    return null;
+  }
+
+  /// 로봇이 쓰는 지도 이름을 사람이 읽는 말로.
+  static String _mapLabel(String m) => switch (m) {
+        'lab_4F' => '연구소 4층',
+        'ward_edit' => '병동',
+        '' => '알 수 없음',
+        _ => m,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -165,26 +209,40 @@ class _RobotStatusBar extends StatelessWidget {
         final d = snap.data?.data();
         final online = d?['online'] == true;
         final busy = d?['busy'] == true;
+        final paused = d?['paused'] == true;
         final pose = d?['pose'] as Map<String, dynamic>?;
+        final map = (d?['map'] ?? '').toString();
 
         // 첫 응답이 오기 전에는 아직 모르는 것이지 끊긴 것이 아니다.
         // 그 짧은 사이에 빨간 '연결 끊김'이 번쩍이면 멀쩡한 로봇도 고장난
         // 것처럼 보인다.
         final unknown = !snap.hasData;
 
+        final at = _time(d?['updatedAt']);
+        final age = at == null ? null : DateTime.now().difference(at);
+        final stale = RobotState.isStale(at);
+
         final (Color bg, Color fg, String text) = switch ((
           unknown,
-          online,
-          busy,
+          stale || !online,
+          busy || paused,
         )) {
           (true, _, _) => (AppColors.pageBg, AppColors.inkDim, '로봇 상태 확인 중…'),
-          (_, false, _) => (
+          (_, true, _) => (
               AppColors.dangerBg,
               AppColors.danger,
-              '로봇 연결 끊김 — 배차해도 움직이지 않습니다'
+              stale
+                  // 전원이 빠졌거나 네트워크가 끊긴 쪽이다. online 은 로봇이
+                  // 직접 false 로 바꿔 쓴 것이라, 곱게 꺼졌다는 뜻이다.
+                  ? '로봇 신호 끊김(${_ago(age ?? Duration.zero)} 전) — 배차해도 움직이지 않습니다'
+                  : '로봇 연결 끊김 — 배차해도 움직이지 않습니다'
             ),
-          (_, true, true) => (AppColors.warnBg, AppColors.warn, '로봇 이동 중'),
-          (_, true, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
+          (_, false, true) => (
+              AppColors.warnBg,
+              AppColors.warn,
+              paused ? '로봇 멈춰 세움' : '로봇 이동 중'
+            ),
+          (_, false, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
         };
 
         return Container(
@@ -196,30 +254,68 @@ class _RobotStatusBar extends StatelessWidget {
               Icon(
                 unknown
                     ? Icons.hourglass_empty_rounded
-                    : online
-                        ? Icons.smart_toy_rounded
-                        : Icons.cloud_off_rounded,
+                    : (stale || !online)
+                        ? Icons.cloud_off_rounded
+                        : Icons.smart_toy_rounded,
                 color: fg,
                 size: 20,
               ),
               const SizedBox(width: 10),
-              Text(
-                text,
-                style: TextStyle(color: fg, fontWeight: FontWeight.w800),
-              ),
-              if (pose != null) ...[
-                const SizedBox(width: 12),
-                Text(
-                  '(${(pose['x'] as num?)?.toStringAsFixed(1) ?? '?'}, '
-                  '${(pose['y'] as num?)?.toStringAsFixed(1) ?? '?'})',
-                  style: TextStyle(color: fg.withValues(alpha: 0.75)),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(color: fg, fontWeight: FontWeight.w800),
                 ),
-              ],
+              ),
+              if (!unknown) _place(d, pose, map, fg),
             ],
           ),
         );
       },
     );
+  }
+
+  /// 로봇이 어디 있는지.
+  ///
+  /// poseOnAppMap 이 false 면 좌표를 쓰지 않는다. 로봇은 좌표만 보내고 어느
+  /// 지도의 좌표인지는 말하지 않는데, 지금 시험하는 연구소 지도와 병동 지도의
+  /// 원점이 다르다 — 연구소 좌표를 병동 기준으로 읽으면 7m 오른쪽, 34.5m
+  /// 위, 복도 밖에 로봇이 있는 것으로 나온다. 실제로 그렇게 보여서 "지도가
+  /// 연결이 안 됐나" 하는 혼란이 있었다. 틀린 좌표보다 지도 이름이 낫다.
+  Widget _place(
+    Map<String, dynamic>? d,
+    Map<String, dynamic>? pose,
+    String map,
+    Color fg,
+  ) {
+    final onAppMap = d?['poseOnAppMap'] == true;
+    final String? label;
+    if (!onAppMap) {
+      label = map.isEmpty ? null : '시험 중 (지도: ${_mapLabel(map)})';
+    } else if (pose != null) {
+      label = '(${(pose['x'] as num?)?.toStringAsFixed(1) ?? '?'}, '
+          '${(pose['y'] as num?)?.toStringAsFixed(1) ?? '?'})';
+    } else {
+      // online 인데 pose 가 없는 것은 고장이 아니다. 로봇이 아직 자기 위치를
+      // 못 찾은 것뿐이라, 끊김으로 보이게 하지 않는다.
+      label = '위치 확인 중';
+    }
+    if (label == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Text(
+        label,
+        style: TextStyle(color: fg.withValues(alpha: 0.75)),
+      ),
+    );
+  }
+
+  /// '3분', '2시간' 처럼 짧게. 초 단위까지 보여 줄 일은 없다 —
+  /// 2분이 지나야 뜨는 글이다.
+  static String _ago(Duration d) {
+    if (d.inHours >= 24) return '${d.inDays}일';
+    if (d.inMinutes >= 60) return '${d.inHours}시간';
+    return '${d.inMinutes}분';
   }
 }
 

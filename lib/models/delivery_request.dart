@@ -64,6 +64,34 @@ class DeliveryStatus {
       };
 }
 
+/// 로봇이 스스로 적는 상태. `robot_state/current` 문서 하나다.
+///
+/// 앱은 읽기만 한다 — Firestore 규칙에서도 쓰기가 막혀 있다.
+class RobotState {
+  const RobotState._();
+
+  /// 이보다 오래된 신호면 끊긴 것으로 본다.
+  ///
+  /// 로봇은 멈춰 있을 때도 60초마다 살아있음 신호를 쓴다. 그래서 한 번
+  /// 빠뜨리는 것은 넘겨 주고, 두 번 연속 빠뜨리면 끊긴 것으로 센다.
+  /// 이 값은 로봇 쪽 브릿지의 신호 주기와 짝이다 — 주기가 바뀌면 같이 고친다.
+  static const Duration deadline = Duration(minutes: 2);
+
+  /// 로봇 신호가 끊겼는가.
+  ///
+  /// `online` 과 다른 것을 잡는다. `online: false` 는 로봇이 직접 쓴 값이라
+  /// '곱게 꺼졌다'는 뜻이고, 여기서 보는 것은 **아무 말도 없이 사라진** 쪽이다.
+  /// 전원이 빠지거나 네트워크가 끊기면 마지막 값이 화면에 그대로 굳는다.
+  ///
+  /// 모르는 것은 끊긴 것으로 세지 않는다. [updatedAt] 이 없으면 false 고,
+  /// 미래 시각이어도 false 다 — 이 PC 시계가 뒤로 틀어져 있을 때 멀쩡한
+  /// 로봇을 죽은 것으로 보이게 하면 안 된다.
+  static bool isStale(DateTime? updatedAt, {DateTime? now}) {
+    if (updatedAt == null) return false;
+    return (now ?? DateTime.now()).difference(updatedAt) > deadline;
+  }
+}
+
 class DeliveryRequest {
   final String id;
   final String room;
