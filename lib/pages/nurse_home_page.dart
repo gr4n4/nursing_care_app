@@ -1110,41 +1110,71 @@ class _NurseHomePageState extends State<NurseHomePage> {
     );
   }
 
-  /// 진행 중인 배송을 보러 가는 버튼.
+  /// 진행 중인 배송을 알리는 아래 고정 바.
   ///
-  /// 진행 중인 것이 없으면 아예 뜨지 않는다. 늘 띄워 두면 평소에 아무 일도
-  /// 없는 버튼이 되어, 정작 눌러야 할 때도 눈에 안 들어온다.
-  Widget deliveryStatusFab() {
+  /// 진행 중인 것이 없으면 자리도 차지하지 않는다. 늘 띄워 두면 평소에 아무
+  /// 일도 없는 띠가 되어, 정작 봐야 할 때도 눈에 안 들어온다.
+  Widget deliveryStatusBar() {
     return ValueListenableBuilder<int>(
       valueListenable: DeliveryWatcher.active,
       builder: (context, active, _) {
         if (active == 0) return const SizedBox.shrink();
-        return ValueListenableBuilder<int>(
-          valueListenable: DeliveryWatcher.arrived,
-          builder: (context, arrived, _) {
-            // 로봇이 문 앞에 대 놓고 기다리는 건이 있으면 색을 채워 올린다.
+        return ValueListenableBuilder<List<String>>(
+          valueListenable: DeliveryWatcher.arrivedRooms,
+          builder: (context, rooms, _) {
+            // 로봇이 문 앞에 대 놓고 기다리는 건이 있으면 색을 채운다.
             // 아무도 안 누르면 로봇이 복도에 선 채로 다음 배송을 못 한다.
-            final waiting = arrived > 0;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: FloatingActionButton.extended(
-                heroTag: 'delivery_status_fab',
-                backgroundColor: waiting ? AppColors.ok : Colors.white,
-                foregroundColor: waiting ? Colors.white : mintDark,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DeliveryStatusPage(),
+            final waiting = rooms.isNotEmpty;
+            final bg = waiting ? AppColors.ok : Colors.white;
+            final fg = waiting ? Colors.white : textDark;
+
+            return Material(
+              color: bg,
+              child: SafeArea(
+                top: false,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeliveryStatusPage(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: waiting
+                          ? null
+                          : const Border(top: BorderSide(color: borderGrey)),
                     ),
-                  );
-                },
-                icon: Icon(waiting
-                    ? Icons.inventory_2_rounded
-                    : Icons.local_shipping_outlined),
-                label: Text(
-                  waiting ? '수령 확인 $arrived건' : '배송 중 $active건',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    child: Row(
+                      children: [
+                        Icon(
+                          waiting
+                              ? Icons.inventory_2_rounded
+                              : Icons.local_shipping_outlined,
+                          color: fg,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            waiting
+                                ? '${roomsLabel(rooms)} 도착 · 받고 수령 완료를 눌러 주세요'
+                                : '물품 배송 $active건 진행 중',
+                            style: TextStyle(
+                              color: fg,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.chevron_right_rounded, color: fg, size: 22),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             );
@@ -1152,6 +1182,19 @@ class _NurseHomePageState extends State<NurseHomePage> {
         );
       },
     );
+  }
+
+  /// '425호', '425호·421호' 처럼. 셋 이상은 세기만 한다 — 띠 한 줄에
+  /// 다 넣으려다 글자가 잘리면 어디인지 아예 못 읽는다.
+  static String roomsLabel(List<String> rooms) {
+    String one(String r) {
+      final t = r.trim();
+      if (t.isEmpty) return '위치 미정';
+      return t.endsWith('호') ? t : '$t호';
+    }
+
+    if (rooms.length > 2) return '${rooms.length}곳';
+    return rooms.map(one).join('·');
   }
 
   @override
@@ -1182,29 +1225,26 @@ class _NurseHomePageState extends State<NurseHomePage> {
           backgroundColor: pageBg,
           // 환자와 무관한 물품 요청(처치실 거즈 등)을 위한 진입점.
           // 환자별 요청은 환자 상세에서 하는 편이 호실이 자동으로 채워져 빠르다.
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              deliveryStatusFab(),
-              FloatingActionButton.extended(
-                heroTag: 'delivery_request_fab',
-                backgroundColor: mintDark,
-                foregroundColor: Colors.white,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DeliveryRequestPage(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.local_shipping_rounded),
-                label: const Text('물품 요청',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ],
+          floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'delivery_request_fab',
+            backgroundColor: mintDark,
+            foregroundColor: Colors.white,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DeliveryRequestPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.local_shipping_rounded),
+            label: const Text('물품 요청',
+                style: TextStyle(fontWeight: FontWeight.w900)),
           ),
+          // 배송 현황은 떠 있는 버튼이 아니라 아래 고정 바로 보여 준다.
+          // 버튼으로 뒀더니 환자 카드를 가렸다. 바는 자리를 차지하므로
+          // 가릴 것이 없고, 띠가 길어 글자도 더 들어간다.
+          bottomNavigationBar: deliveryStatusBar(),
           body: SafeArea(
             bottom: false,
             child: LayoutBuilder(
@@ -1220,7 +1260,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
                         children: [
                           pageHeader(nurseName),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+                            // 아래 여백이 떠 있는 '물품 요청' 버튼보다 커야
+                            // 한다. 28 이었을 때는 끝까지 내려도 마지막 카드
+                            // 오른쪽 아래가 버튼에 덮여 있었다.
+                            padding: const EdgeInsets.fromLTRB(18, 22, 18, 96),
                             child: manageMode
                                 ? manageView(mine, others)
                                 : Column(

@@ -35,6 +35,11 @@ class DeliveryWatcher {
   /// 지금 돌고 있는 배송 건수(요청부터 복귀 전까지).
   static final ValueNotifier<int> active = ValueNotifier<int>(0);
 
+  /// 로봇이 대 놓고 기다리는 곳. '1건 도착' 보다 '425호 도착' 이 쓸모 있다 —
+  /// 간호사가 화면을 더 들어가 보지 않고 바로 어디로 갈지 안다.
+  static final ValueNotifier<List<String>> arrivedRooms =
+      ValueNotifier<List<String>>(const []);
+
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   /// 이미 본 요청. 화면을 열 때 쌓여 있던 것까지 소리내지 않으려고 쓴다.
@@ -71,14 +76,19 @@ class DeliveryWatcher {
         .snapshots()
         .listen(
       (snap) {
-        var waiting = 0, atDoor = 0;
+        var waiting = 0;
+        final atDoor = <String>[];
         for (final doc in snap.docs) {
-          final st = (doc.data()['status'] ?? '').toString();
+          final d = doc.data();
+          final st = (d['status'] ?? '').toString();
           if (st == DeliveryStatus.requested) waiting++;
-          if (st == DeliveryStatus.delivered) atDoor++;
+          if (st == DeliveryStatus.delivered) {
+            atDoor.add((d['room'] ?? '').toString());
+          }
         }
         pending.value = waiting;
-        arrived.value = atDoor;
+        arrived.value = atDoor.length;
+        arrivedRooms.value = atDoor;
         active.value = snap.docs.length;
 
         // 소리와 팝업은 '새로 올라온 요청' 에만 쓴다. 진행 중인 건이
@@ -118,6 +128,7 @@ class DeliveryWatcher {
     _primed = false;
     pending.value = 0;
     arrived.value = 0;
+    arrivedRooms.value = const [];
     active.value = 0;
   }
 
