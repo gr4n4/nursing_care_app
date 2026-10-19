@@ -1,0 +1,25 @@
+{
+  "map": "ward_edit",
+  "image": "assets/map/ward_4f.png",
+  "imageWidth": 1672,
+  "imageHeight": 941,
+  "pxPerMeter": 20.994,
+  "transform": {
+    "a": -4.280809,
+    "b": 20.552669,
+    "c": 1089.702,
+    "d": -20.552669,
+    "e": -4.280809,
+    "f": 461.111
+  },
+  "fittedAt": "2026-10-19",
+  "fittedFrom": {
+    "pgm": "ward_edit.pgm 649x1500",
+    "resolution": 0.05,
+    "origin": [
+      -15.9,
+      -50.1,
+      0
+    ]
+  }
+}

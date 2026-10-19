@@ -1,0 +1,9 @@
+# 연구소 4층 복도. /home/nrc/4floor_map3 을 워크스페이스로 들여온 것.
+# 지도는 좌표와 짝이므로 config/lab_waypoints.json 과 같이 움직여야 한다.
+image: lab_4F.pgm
+mode: trinary
+resolution: 0.05
+origin: [-8.9, -15.6, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.15
