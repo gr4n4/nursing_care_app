@@ -210,6 +210,14 @@ class _RobotStatusBarState extends State<_RobotStatusBar> {
         final online = d?['online'] == true;
         final busy = d?['busy'] == true;
         final paused = d?['paused'] == true;
+        // 로봇이 살아는 있는데 사람이 가봐야 하는 상태. 복귀에 실패해 복도에
+        // 서 있는 경우가 대표적이다.
+        //
+        // 예전에는 복귀 실패가 그 배송 건의 status 를 failed 로 덮어서, 적어도
+        // 목록에 빨갛게는 떴다. 이제 그 건은 closed 로 끝나므로 여기서 받지
+        // 않으면 아무 데도 안 보인다. 로봇이 못 움직이는 것은 배송 한 건의
+        // 문제가 아니라 다음 배송 전부의 문제다.
+        final needsAttention = d?['needsAttention'] == true;
         final pose = d?['pose'] as Map<String, dynamic>?;
         final map = (d?['map'] ?? '').toString();
 
@@ -225,10 +233,12 @@ class _RobotStatusBarState extends State<_RobotStatusBar> {
         final (Color bg, Color fg, String text) = switch ((
           unknown,
           stale || !online,
+          needsAttention,
           busy || paused,
         )) {
-          (true, _, _) => (AppColors.pageBg, AppColors.inkDim, '로봇 상태 확인 중…'),
-          (_, true, _) => (
+          (true, _, _, _) =>
+            (AppColors.pageBg, AppColors.inkDim, '로봇 상태 확인 중…'),
+          (_, true, _, _) => (
               AppColors.dangerBg,
               AppColors.danger,
               stale
@@ -237,12 +247,19 @@ class _RobotStatusBarState extends State<_RobotStatusBar> {
                   ? '로봇 신호 끊김(${_ago(age ?? Duration.zero)} 전) — 배차해도 움직이지 않습니다'
                   : '로봇 연결 끊김 — 배차해도 움직이지 않습니다'
             ),
-          (_, false, true) => (
+          // 끊김 다음으로 급하다. 배차해 봐야 로봇이 못 간다.
+          (_, false, true, _) => (
+              AppColors.dangerBg,
+              AppColors.danger,
+              _attention(d?['attentionCode']),
+            ),
+          (_, false, false, true) => (
               AppColors.warnBg,
               AppColors.warn,
               paused ? '로봇 멈춰 세움' : '로봇 이동 중'
             ),
-          (_, false, false) => (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
+          (_, false, false, false) =>
+            (AppColors.okBg, AppColors.ok, '로봇 대기 중'),
         };
 
         return Container(
@@ -256,7 +273,9 @@ class _RobotStatusBarState extends State<_RobotStatusBar> {
                     ? Icons.hourglass_empty_rounded
                     : (stale || !online)
                         ? Icons.cloud_off_rounded
-                        : Icons.smart_toy_rounded,
+                        : needsAttention
+                            ? Icons.report_problem_rounded
+                            : Icons.smart_toy_rounded,
                 color: fg,
                 size: 20,
               ),
@@ -309,6 +328,14 @@ class _RobotStatusBarState extends State<_RobotStatusBar> {
       ),
     );
   }
+
+  /// 사람을 부르는 말. 무엇을 해야 하는지까지 적는다 — '점검 필요' 라고만
+  /// 쓰면 읽고도 아무도 안 움직인다.
+  static String _attention(dynamic code) => switch ((code ?? '').toString()) {
+        'return_failed' => '로봇이 대기 자리로 돌아가지 못했습니다 — 가서 확인해 주세요',
+        '' => '로봇을 확인해 주세요',
+        final c => '로봇을 확인해 주세요 ($c)',
+      };
 
   /// '3분', '2시간' 처럼 짧게. 초 단위까지 보여 줄 일은 없다 —
   /// 2분이 지나야 뜨는 글이다.
@@ -431,7 +458,11 @@ class _RequestCardState extends State<_RequestCard> {
   Widget build(BuildContext context) {
     final r = widget.req;
     final action = DeliveryStatus.nextAction(r.status);
-    final failed = r.status == DeliveryStatus.failed;
+    // 복귀 실패는 빨간 테두리를 두르지 않는다. 물품은 전달이 끝난 건이라
+    // 간호사가 할 일이 없다. 가서 봐야 하는 것은 로봇이고, 그건 위 상태
+    // 띠가 말한다.
+    final failed = r.deliveryResult == 'failed' ||
+        (r.deliveryResult.isEmpty && r.status == DeliveryStatus.failed);
 
     return Opacity(
       opacity: widget.dim ? 0.62 : 1,
@@ -484,7 +515,7 @@ class _RequestCardState extends State<_RequestCard> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _statusChip(r.status),
+                          _statusChip(r),
                           // 멈춰 세운 것은 상태와 따로 표시한다. 상태는
                           // 어디까지 갔는지를, 이것은 지금 가고 있는지를 말한다.
                           if (r.paused) ...[
@@ -511,13 +542,15 @@ class _RequestCardState extends State<_RequestCard> {
                   ),
                 ),
               ),
-            if (failed && r.failReason.isNotEmpty)
+            if (r.failNote != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12, left: 62),
                 child: Text(
-                  '실패 사유: ${r.failReason}',
-                  style: const TextStyle(
-                    color: AppColors.danger,
+                  r.failNote!,
+                  style: TextStyle(
+                    // 복귀 실패는 경고지 사고가 아니다. 색을 달리해
+                    // "물건은 갔다" 가 먼저 읽히게 한다.
+                    color: r.robotStranded ? AppColors.warn : AppColors.danger,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -672,21 +705,25 @@ class _RequestCardState extends State<_RequestCard> {
         ),
       );
 
-  Widget _statusChip(String s) {
-    final (Color bg, Color fg) = switch (s) {
-      DeliveryStatus.requested => (AppColors.warnBg, AppColors.warn),
-      DeliveryStatus.delivered => (AppColors.okBg, AppColors.ok),
-      DeliveryStatus.closed => (AppColors.okBg, AppColors.ok),
-      DeliveryStatus.failed => (AppColors.dangerBg, AppColors.danger),
-      DeliveryStatus.canceled => (AppColors.pageBg, AppColors.inkDim),
-      _ => (AppColors.brandSoft, AppColors.brand),
-    };
+  Widget _statusChip(DeliveryRequest r) {
+    // 복귀 실패는 '완료' 와 같은 초록으로 두면 안 된다. 물품은 갔지만
+    // 로봇이 복도에 서 있어서 다음 배송이 안 나간다.
+    final (Color bg, Color fg) = r.robotStranded
+        ? (AppColors.warnBg, AppColors.warn)
+        : switch (r.status) {
+            DeliveryStatus.requested => (AppColors.warnBg, AppColors.warn),
+            DeliveryStatus.delivered => (AppColors.okBg, AppColors.ok),
+            DeliveryStatus.closed => (AppColors.okBg, AppColors.ok),
+            DeliveryStatus.failed => (AppColors.dangerBg, AppColors.danger),
+            DeliveryStatus.canceled => (AppColors.pageBg, AppColors.inkDim),
+            _ => (AppColors.brandSoft, AppColors.brand),
+          };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration:
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(
-        DeliveryStatus.label(s),
+        r.resultLabel,
         style: TextStyle(
           color: fg,
           fontWeight: FontWeight.w800,

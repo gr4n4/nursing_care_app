@@ -92,6 +92,36 @@ class RobotState {
   }
 }
 
+/// 로봇이 왜 못 갔는지를 간호사가 읽는 말로 바꾼다.
+///
+/// 로봇이 함께 보내는 failReason 은 "'적재' 주행 실패" 처럼 내부 목적지
+/// 이름이 그대로 새어 나온 말이다. 로그를 볼 때는 쓸모가 있지만, 간호사가
+/// 읽고 **무엇을 해야 하는지** 는 알 수 없다. 그래서 코드로 받아 여기서
+/// 문구를 만든다.
+class DeliveryFail {
+  const DeliveryFail._();
+
+  /// 로봇과 맞춰 둔 코드표. 여기 없는 코드가 와도 화면이 비면 안 된다.
+  static const Map<String, String> _notes = {
+    'room_not_servable': '로봇이 갈 수 없는 호실입니다. 다른 방법으로 전달해 주세요.',
+    'waypoint_missing': '로봇 자리 설정이 빠졌습니다. 로봇 담당자를 불러 주세요.',
+    'nav_failed_loading': '로봇이 물품을 실으러 가다 멈췄습니다. 널스스테이션을 확인해 주세요.',
+    'nav_failed_room': '로봇이 병실로 가다 멈췄습니다. 복도를 확인해 주세요.',
+    'nav_timeout': '로봇이 제 시간에 닿지 못했습니다. 복도를 확인해 주세요.',
+    'goal_rejected': '로봇이 목적지를 받지 못했습니다. 로봇 담당자를 불러 주세요.',
+    'nav_failed_return': '물품은 전달됐습니다. 로봇이 대기 자리로 돌아가지 못했습니다.',
+  };
+
+  /// [code] 를 문구로. 모르는 코드면 로봇이 적은 [reason] 이라도 보여 준다 —
+  /// 뜻을 모르는 글이라도 아무 말 없는 것보다는 낫다.
+  static String describe(String code, String reason) {
+    final note = _notes[code];
+    if (note != null) return note;
+    if (reason.isNotEmpty) return '로봇이 멈췄습니다 ($reason). 복도를 확인해 주세요.';
+    return '로봇이 멈췄습니다. 복도를 확인해 주세요.';
+  }
+}
+
 class DeliveryRequest {
   final String id;
   final String room;
@@ -105,6 +135,30 @@ class DeliveryRequest {
   final String createdBy;
 
   final String failReason;
+
+  /// 물품을 전달했는가: `done` / `failed`. 로봇만 쓴다.
+  ///
+  /// 복귀 성패와 갈라 놓은 값이다. 예전에는 `status` 하나에 둘을 겹쳐 써서,
+  /// 물건을 다 전달하고 돌아오다 멈추면 배송 전체가 실패로 남았다. 간호사
+  /// 입장에서는 성공인데 기록은 실패라, 그대로 두면 성공률이 실제보다
+  /// 나쁘게 나온다.
+  ///
+  /// **로봇이 아직 안 쓸 수 있다.** 비어 있으면 예전처럼 `status` 로 읽는다.
+  final String deliveryResult;
+
+  /// 대기 자리로 돌아갔는가: `closed` / `failed`. 로봇만 쓴다.
+  ///
+  /// `failed` 라도 물품은 전달이 끝난 것이다. 복도에 로봇이 서 있는 것은
+  /// 그 배송 건의 문제가 아니라 로봇의 문제라, 요청 목록이 아니라
+  /// `robot_state/current` 의 needsAttention 으로 사람을 부른다.
+  final String returnResult;
+
+  /// 실패 종류. 간호사에게 보일 문구는 앱이 만든다 —
+  /// [failReason] 은 로봇이 로그용으로 적는 자유문구라 화면에 쓰지 않는다.
+  final String failCode;
+
+  final String returnFailCode;
+  final String returnFailReason;
 
   /// 잠깐 멈춰 달라는 표시.
   ///
@@ -124,6 +178,11 @@ class DeliveryRequest {
     this.createdAt,
     this.createdBy = '',
     this.failReason = '',
+    this.deliveryResult = '',
+    this.returnResult = '',
+    this.failCode = '',
+    this.returnFailCode = '',
+    this.returnFailReason = '',
     this.paused = false,
   });
 
@@ -143,6 +202,11 @@ class DeliveryRequest {
       createdAt: _parseTime(d['createdAt']),
       createdBy: (d['createdBy'] ?? '').toString(),
       failReason: (d['failReason'] ?? '').toString(),
+      deliveryResult: (d['deliveryResult'] ?? '').toString(),
+      returnResult: (d['returnResult'] ?? '').toString(),
+      failCode: (d['failCode'] ?? '').toString(),
+      returnFailCode: (d['returnFailCode'] ?? '').toString(),
+      returnFailReason: (d['returnFailReason'] ?? '').toString(),
       paused: d['paused'] == true,
     );
   }
@@ -165,6 +229,49 @@ class DeliveryRequest {
       : items.map((e) => e.display).join(', ');
 
   bool get isActive => DeliveryStatus.active.contains(status);
+
+  /// 로봇이 대기 자리로 돌아가지 못했는가.
+  ///
+  /// 이때 `status` 는 `closed` 로 온다. 물품은 전달이 끝났으니 그 건은 끝난
+  /// 일이 맞고, 못 돌아간 것은 따로 드러내야 한다. 이 값을 안 보면 복도에
+  /// 로봇이 서 있는데 화면에는 '완료' 로만 보인다.
+  bool get robotStranded => returnResult == 'failed';
+
+  /// 물품이 전달됐는가.
+  ///
+  /// 로봇이 새 필드를 쓰기 전에는 `status` 로 읽는다. 이 갈래가 없으면
+  /// 앱을 먼저 배포할 수 없다 — 로봇만 먼저 고치면 복귀 실패가 '완료' 로
+  /// 보여, 지금 있는 신호마저 사라진다.
+  bool get deliveredOk => deliveryResult.isNotEmpty
+      ? deliveryResult == 'done'
+      : (status == DeliveryStatus.done || status == DeliveryStatus.closed);
+
+  /// 화면에 쓸 끝맺음 말.
+  ///
+  /// 새 필드가 하나도 없으면 예전과 똑같은 글자가 나온다.
+  String get resultLabel {
+    if (status == DeliveryStatus.canceled) return '취소됨';
+    if (deliveryResult.isEmpty && returnResult.isEmpty) {
+      return DeliveryStatus.label(status);
+    }
+    if (deliveryResult == 'failed') return '배송 실패';
+    if (robotStranded) return '전달 완료 · 로봇 복귀 실패';
+    return DeliveryStatus.label(status);
+  }
+
+  /// 간호사에게 보일 실패 설명. 없으면 null.
+  ///
+  /// 로봇이 적는 failReason("'적재' 주행 실패")은 쓰지 않는다. 내부 목적지
+  /// 이름이 그대로 새어 나온 말이라, 간호사가 무엇을 해야 하는지 알 수 없다.
+  String? get failNote {
+    if (robotStranded) {
+      return '물품은 전달됐습니다. 로봇이 대기 자리로 돌아가지 못했습니다.';
+    }
+    if (deliveryResult == 'failed' || status == DeliveryStatus.failed) {
+      return DeliveryFail.describe(failCode, failReason);
+    }
+    return null;
+  }
 }
 
 class DeliveryItem {

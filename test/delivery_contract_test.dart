@@ -46,6 +46,88 @@ void main() {
     expect(DeliveryStatus.active, isNot(contains(DeliveryStatus.closed)));
   });
 
+  group('배송 성패와 복귀 성패는 따로 센다', () {
+    DeliveryRequest req({
+      String status = DeliveryStatus.closed,
+      String deliveryResult = '',
+      String returnResult = '',
+      String failCode = '',
+      String failReason = '',
+    }) =>
+        DeliveryRequest(
+          id: 'x',
+          room: '425',
+          items: const [],
+          status: status,
+          deliveryResult: deliveryResult,
+          returnResult: returnResult,
+          failCode: failCode,
+          failReason: failReason,
+        );
+
+    test('로봇이 새 필드를 안 쓰면 예전과 똑같이 보인다', () {
+      // 앱을 먼저 배포해야 해서 이 갈래가 꼭 있어야 한다. 로봇만 먼저
+      // 고치면 복귀 실패가 '완료' 로 보여 지금 있는 신호마저 사라진다.
+      expect(req(status: DeliveryStatus.closed).resultLabel, '완료');
+      expect(req(status: DeliveryStatus.closed).deliveredOk, isTrue);
+      expect(req(status: DeliveryStatus.failed).resultLabel, '실패');
+      expect(req(status: DeliveryStatus.failed).deliveredOk, isFalse);
+      expect(req(status: DeliveryStatus.closed).robotStranded, isFalse);
+    });
+
+    test('복귀만 실패한 건은 성공으로 센다', () {
+      // 물품은 전달이 끝났다. 이걸 실패로 세면 성공률이 실제보다 나빠진다.
+      final r = req(deliveryResult: 'done', returnResult: 'failed');
+      expect(r.deliveredOk, isTrue);
+      expect(r.robotStranded, isTrue);
+      expect(r.resultLabel, '전달 완료 · 로봇 복귀 실패');
+      expect(r.failNote, contains('물품은 전달됐습니다'));
+    });
+
+    test('배송이 실패한 건은 실패로 센다', () {
+      final r = req(
+        status: DeliveryStatus.failed,
+        deliveryResult: 'failed',
+        failCode: 'nav_failed_room',
+      );
+      expect(r.deliveredOk, isFalse);
+      expect(r.resultLabel, '배송 실패');
+      expect(r.failNote, contains('병실로 가다 멈췄습니다'));
+    });
+
+    test('둘 다 성공하면 그냥 완료다', () {
+      final r = req(deliveryResult: 'done', returnResult: 'closed');
+      expect(r.deliveredOk, isTrue);
+      expect(r.robotStranded, isFalse);
+      expect(r.resultLabel, '완료');
+      expect(r.failNote, isNull);
+    });
+
+    test('취소는 결과값이 있어도 취소로 보인다', () {
+      expect(req(status: DeliveryStatus.canceled).resultLabel, '취소됨');
+    });
+  });
+
+  group('실패 문구', () {
+    test('모르는 코드가 와도 화면이 비지 않는다', () {
+      // 로봇이 코드표에 없는 값을 보낼 수 있다. 그때 아무 말도 안 하면
+      // 간호사는 왜 안 왔는지 알 길이 없다.
+      expect(
+        DeliveryFail.describe('아직_없는_코드', "'적재' 주행 실패"),
+        contains("'적재' 주행 실패"),
+      );
+      expect(DeliveryFail.describe('', ''), isNotEmpty);
+    });
+
+    test('로봇이 적은 내부 문구를 그대로 쓰지 않는다', () {
+      // "'적재' 주행 실패" 는 내부 목적지 이름이 새어 나온 말이라,
+      // 간호사가 읽어도 무엇을 해야 하는지 알 수 없다.
+      final note = DeliveryFail.describe('nav_failed_loading', "'적재' 주행 실패");
+      expect(note, isNot(contains('적재')));
+      expect(note, contains('널스스테이션'));
+    });
+  });
+
   group('로봇 신호 끊김 판정', () {
     final now = DateTime(2026, 10, 16, 9, 0);
 
