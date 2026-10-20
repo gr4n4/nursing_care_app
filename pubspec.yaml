@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.6.0+12
+version: 2.7.0+13
 
 environment:
   sdk: ^3.12.1
@@ -94,6 +94,10 @@ flutter:
     - assets/icon/alert-fall.svg
     - assets/icon/alert-bedside.svg
     - assets/icon/alert-pressure.svg
+    # 병동·연구소 층 도면. 로봇 위치를 이 그림 위에 찍는다.
+    # 로봇이 길을 찾는 지도(점유격자)와는 다른 그림이다 — maps/README.md 참고.
+    - assets/map/ward_4f.png
+    - assets/map/lab_4f.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

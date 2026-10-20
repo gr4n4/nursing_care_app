@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/delivery_request.dart';
 import '../theme/app_colors.dart';
+import '../widgets/robot_map_view.dart';
 
 /// 로봇 배차 (웹 · 널스스테이션).
 ///
@@ -31,6 +32,9 @@ class DeliveryDispatchPage extends StatelessWidget {
       body: Column(
         children: [
           const _RobotStatusBar(),
+          // 지도는 상태 띠 바로 아래. "살아 있나"를 먼저 보고 "어디쯤인가"를
+          // 본다 — 죽은 로봇의 마지막 자리를 현재 위치로 읽으면 안 된다.
+          const RobotMapView(),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               // 최근 것만 가져온다.
