@@ -31,17 +31,17 @@
     "image": "assets/map/lab_4f.png",
     "imageWidth": 1672,
     "imageHeight": 941,
-    "pxPerMeterX": 46.658,
-    "pxPerMeterY": 45.149,
+    "pxPerMeterX": 42.597,
+    "pxPerMeterY": 40.897,
     "transform": {
-      "a": -31.009176,
-      "b": 36.001997,
-      "c": 1203.328642,
-      "d": 34.862408,
-      "e": 27.245176,
-      "f": 368.750817
+      "a": -32.768492,
+      "b": 34.393609,
+      "c": 1213.907801,
+      "d": 27.216006,
+      "e": 22.127891,
+      "f": 410.065949
     },
-    "anchor": "가운데 뚫린 공간(open) 중심",
+    "anchor": "뚫린 공간(open) 중심 (격자 329,380 = 도면 848,540)",
     "fittedAt": "2026-10-20",
     "fittedFrom": {
       "pgm": "lab_4F.pgm 639x624",
