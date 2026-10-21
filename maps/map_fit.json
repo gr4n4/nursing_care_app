@@ -2,17 +2,17 @@
   "ward_edit": {
     "map": "ward_edit",
     "image": "assets/map/ward_4f.png",
-    "imageWidth": 1672,
-    "imageHeight": 941,
+    "imageWidth": 1559,
+    "imageHeight": 661,
     "pxPerMeterX": 20.757,
     "pxPerMeterY": 21.376,
     "transform": {
       "a": 4.839265,
       "b": -20.899591,
-      "c": 677.880123,
+      "c": 578.880123,
       "d": -20.184748,
       "e": -4.485507,
-      "f": 459.206648
+      "f": 346.206648
     },
     "anchor": "간호사실 카운터 (격자 250,821 = 도면 1000,606)",
     "fittedAt": "2026-10-20",
@@ -29,17 +29,17 @@
   "lab_4F": {
     "map": "lab_4F",
     "image": "assets/map/lab_4f.png",
-    "imageWidth": 1672,
-    "imageHeight": 941,
+    "imageWidth": 1561,
+    "imageHeight": 900,
     "pxPerMeterX": 42.628,
     "pxPerMeterY": 40.786,
     "transform": {
       "a": -32.700643,
       "b": 34.328179,
-      "c": 1202.419446,
+      "c": 1147.419446,
       "d": 27.34639,
       "e": 22.023876,
-      "f": 408.721819
+      "f": 376.721819
     },
     "anchor": "뚫린 공간(open) 중심 (격자 329,380 = 도면 848,540)",
     "fittedAt": "2026-10-20",

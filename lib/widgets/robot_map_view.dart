@@ -27,7 +27,15 @@ class _RobotMapViewState extends State<RobotMapView> {
   /// 점만 흐려 두면 "지금 보이는 자리가 최신은 아니다" 가 전해진다.
   static const Duration _fresh = Duration(seconds: 10);
 
+  /// 지도가 차지할 수 있는 최대 높이.
+  ///
+  /// 안 막으면 도면이 가로폭을 꽉 채우며 세로로도 같이 커져서, 배차 화면에
+  /// 들어오자마자 요청 목록이 화면 밖으로 밀려난다. 배차 화면의 주인공은
+  /// 요청 목록이고 지도는 곁들이다.
+  static const double _maxHeight = 320;
+
   Timer? _tick;
+  bool _open = true;
 
   @override
   void initState() {
@@ -58,28 +66,31 @@ class _RobotMapViewState extends State<RobotMapView> {
               .doc('current')
               .snapshots(),
           builder: (context, snap) {
-            final pose = RobotPose.fromDoc(snap.data?.data());
-            // 지도 이름으로 보정값을 고른다. 모르는 지도면 점을 안 찍는다.
-            final floor = pose == null ? null : maps[pose.map];
-            final spot = (pose == null || floor == null)
+            final d = snap.data?.data();
+
+            // 어느 층 그림을 띄울지는 **좌표와 상관없이** 지도 이름으로 고른다.
+            //
+            // 예전에는 pose 가 없으면 이름까지 버리고 병동으로 떨어뜨렸다.
+            // 그래서 연구소에서 시험하는데 병동 도면이 떴다. 로봇이 자기
+            // 위치를 못 찾는 것과 어느 층에 있는지는 별개다.
+            final mapName = (d?['map'] ?? '').toString();
+            final floor = maps[mapName] ?? maps['ward_edit']!;
+            final known = maps.containsKey(mapName);
+
+            final pose = RobotPose.fromDoc(d);
+            final spot = (pose == null || !known)
                 ? null
                 : floor.toPixel(pose.x, pose.y);
-
-            // 로봇이 어느 지도에 있든, 아는 지도가 하나면 그 그림은 띄운다.
-            // 그림이 없으면 화면이 통째로 비어 무슨 기능인지 알 수 없다.
-            final shown = floor ?? maps['ward_edit'] ?? FloorMap.builtIn['ward_edit']!;
 
             final age = pose?.at == null
                 ? null
                 : DateTime.now().difference(pose!.at!);
-            final stale = age == null || age > _fresh;
 
             return _frame(
-              context,
-              shown,
+              floor,
               spot,
-              stale,
-              _note(snap, pose, floor, spot),
+              age == null || age > _fresh,
+              _note(snap, d, pose, mapName, known, spot),
             );
           },
         );
@@ -91,78 +102,131 @@ class _RobotMapViewState extends State<RobotMapView> {
   /// 고장인지 원래 그런 건지 알 수가 없다.
   String? _note(
     AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snap,
+    Map<String, dynamic>? d,
     RobotPose? pose,
-    FloorMap? floor,
+    String mapName,
+    bool known,
     ({double x, double y})? spot,
   ) {
     if (!snap.hasData) return '로봇 위치를 불러오는 중…';
+    if (d == null) return '로봇이 아직 아무것도 올리지 않았습니다';
+    if (!known) {
+      return mapName.isEmpty
+          ? '로봇이 어느 지도에 있는지 아직 모릅니다'
+          : '보정하지 않은 지도입니다 ($mapName) — 병동 도면을 대신 띄웁니다';
+    }
     if (pose == null) return '로봇이 아직 자기 위치를 찾는 중입니다';
-    if (floor == null) return '다른 지도에서 움직이는 중입니다 (${pose.map})';
     if (spot == null) return '로봇이 도면 밖에 있습니다 — 지도 보정을 확인해 주세요';
     return null;
   }
 
   Widget _frame(
-    BuildContext context,
     FloorMap floor,
     ({double x, double y})? spot,
     bool stale,
     String? note,
   ) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      margin: const EdgeInsets.fromLTRB(20, 14, 20, 2),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LayoutBuilder(
-            builder: (context, c) {
-              // 그림을 가로폭에 맞춰 통째로 보여 준다. 잘라내면 로봇이
-              // 잘린 쪽으로 갔을 때 사라진다.
-              final scale = c.maxWidth / floor.imageWidth;
-              final h = floor.imageHeight * scale;
-              return SizedBox(
-                width: c.maxWidth,
-                height: h,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Image.asset(floor.asset, fit: BoxFit.fill),
+          _bar(floor, note),
+          if (_open)
+            LayoutBuilder(
+              builder: (context, c) {
+                // 가로폭에 맞추되 높이로 한 번 더 조인다. 둘 중 작은 쪽을
+                // 쓰므로 그림 전체가 늘 들어온다 — 잘라내면 로봇이 잘린
+                // 쪽으로 갔을 때 사라진다.
+                final scale = (c.maxWidth / floor.imageWidth)
+                    .clamp(0.0, _maxHeight / floor.imageHeight);
+                final w = floor.imageWidth * scale;
+                final h = floor.imageHeight * scale;
+                return Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 10),
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Image.asset(floor.asset, fit: BoxFit.fill),
+                        ),
+                        if (spot != null)
+                          AnimatedPositioned(
+                            // 로봇이 2초마다 올리니 2초에 걸쳐 미끄러진다.
+                            duration: const Duration(seconds: 2),
+                            curve: Curves.linear,
+                            left: spot.x * scale - 11,
+                            top: spot.y * scale - 11,
+                            child: _Dot(faded: stale),
+                          ),
+                      ],
                     ),
-                    if (spot != null)
-                      AnimatedPositioned(
-                        // 로봇이 2초마다 올리니 2초에 걸쳐 미끄러진다.
-                        duration: const Duration(seconds: 2),
-                        curve: Curves.linear,
-                        left: spot.x * scale - 13,
-                        top: spot.y * scale - 13,
-                        child: _Dot(faded: stale),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-          if (note != null)
-            Container(
-              width: double.infinity,
-              color: AppColors.pageBg,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              child: Text(
-                note,
-                style: const TextStyle(
-                  color: AppColors.inkDim,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+                  ),
+                );
+              },
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _bar(FloorMap floor, String? note) {
+    return InkWell(
+      onTap: () => setState(() => _open = !_open),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 11, 12, 11),
+        child: Row(
+          children: [
+            Icon(Icons.map_outlined, size: 17, color: AppColors.inkDim),
+            const SizedBox(width: 8),
+            Text(
+              floor.label,
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (note != null) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  note,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.inkDim,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ] else
+              const Spacer(),
+            Text(
+              _open ? '접기' : '펼치기',
+              style: const TextStyle(
+                color: AppColors.inkDim,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Icon(
+              _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+              size: 20,
+              color: AppColors.inkDim,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -179,16 +243,16 @@ class _Dot extends StatelessWidget {
     return Opacity(
       opacity: faded ? 0.42 : 1,
       child: Container(
-        width: 26,
-        height: 26,
+        width: 22,
+        height: 22,
         decoration: BoxDecoration(
           color: AppColors.danger,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 3.5),
+          border: Border.all(color: Colors.white, width: 3),
           boxShadow: [
             BoxShadow(
               color: AppColors.danger.withValues(alpha: 0.35),
-              blurRadius: 10,
+              blurRadius: 9,
               spreadRadius: 2,
             ),
           ],

@@ -23,6 +23,9 @@ class FloorMap {
   /// 화면에 띄울 그림.
   final String asset;
 
+  /// 사람이 읽는 이름. 지도 이름(`ward_edit`)을 그대로 띄우면 뭔지 모른다.
+  final String label;
+
   final int imageWidth;
   final int imageHeight;
 
@@ -32,6 +35,7 @@ class FloorMap {
   const FloorMap({
     required this.mapName,
     required this.asset,
+    required this.label,
     required this.imageWidth,
     required this.imageHeight,
     required this.a,
@@ -52,10 +56,11 @@ class FloorMap {
     'ward_edit': FloorMap(
       mapName: 'ward_edit',
       asset: 'assets/map/ward_4f.png',
-      imageWidth: 1672,
-      imageHeight: 941,
-      a: 4.839265, b: -20.899591, c: 677.880,
-      d: -20.184748, e: -4.485507, f: 459.207,
+      label: '병동 4층',
+      imageWidth: 1559,
+      imageHeight: 661,
+      a: 4.839265, b: -20.899591, c: 578.880,
+      d: -20.184748, e: -4.485507, f: 346.207,
     ),
     // 연구소는 실로봇 시뮬레이션을 돌리는 곳이다. 벽이 유리라 라이다에
     // 거의 안 잡혀(벽 화소가 병동의 1/5) 병동만큼 촘촘히 맞추지는 못했다.
@@ -63,10 +68,11 @@ class FloorMap {
     'lab_4F': FloorMap(
       mapName: 'lab_4F',
       asset: 'assets/map/lab_4f.png',
-      imageWidth: 1672,
-      imageHeight: 941,
-      a: -32.700643, b: 34.328179, c: 1202.419,
-      d: 27.346390, e: 22.023876, f: 408.722,
+      label: '연구소 4층',
+      imageWidth: 1561,
+      imageHeight: 900,
+      a: -32.700643, b: 34.328179, c: 1147.419,
+      d: 27.346390, e: 22.023876, f: 376.722,
     ),
   };
 
@@ -97,6 +103,7 @@ class FloorMap {
     return FloorMap(
       mapName: name,
       asset: asset,
+      label: (m['label'] ?? base?.label ?? name).toString(),
       imageWidth: w is num ? w.toInt() : (base?.imageWidth ?? 0),
       imageHeight: h is num ? h.toInt() : (base?.imageHeight ?? 0),
       a: a, b: b, c: c, d: d, e: e, f: f,
