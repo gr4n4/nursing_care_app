@@ -568,16 +568,46 @@ class _StationPageState extends State<StationPage> {
         .get();
 
     String roomNo(String v) => RegExp(r'\d+').firstMatch(v)?.group(0) ?? '';
+    String key(String v) => v.replaceAll(RegExp(r'\s+'), '');
 
-    // 병실번호 -> {낙상 n, 걸터앉음 n}
-    final Map<String, Map<String, int>> alertsByRoom = {};
+    // 한 방에 침대가 여럿이면 호실만으로는 누구인지 못 가린다.
+    //
+    // 예전에는 호실 번호만 봤다. 그때는 방마다 센서가 하나였다. 429호에
+    // 센서 셋을 달고 한 대로 시험을 쏘니 **429호 세 명이 전부 '낙상 1'**
+    // 이 됐다. 세 간호사가 세 침대로 흩어져 뛰는 꼴이라, 아무에게도 안
+    // 붙이는 것만 못하다.
+    //
+    // 이름으로 맞춘다. 경보의 patientName 은 센서에 붙여 둔 이름이고,
+    // 그것이 곧 그 침대를 쓰는 사람이다.
+    final nameInRoom = <String, List<String>>{};   // 호실 -> 환자 이름들
+    for (final d in patientsSnapshot.docs) {
+      final r = roomNo((d.data()['room'] ?? '').toString());
+      if (r.isEmpty) continue;
+      nameInRoom.putIfAbsent(r, () => []).add(
+          key((d.data()['name'] ?? '').toString()));
+    }
+
+    // '호실|이름' -> {낙상 n, 걸터앉음 n}
+    final Map<String, Map<String, int>> alertsFor = {};
     for (final doc in alertSnapshot.docs) {
       final data = doc.data();
       final kind = (data['kind'] ?? '').toString();
       if (kind != 'fall' && kind != 'bedside') continue;
       final r = roomNo((data['room'] ?? '').toString());
       if (r.isEmpty) continue;
-      final m = alertsByRoom.putIfAbsent(r, () => {'fall': 0, 'bedside': 0});
+      final who = key((data['patientName'] ?? '').toString());
+      final here = nameInRoom[r] ?? const <String>[];
+
+      String? target;
+      if (who.isNotEmpty && here.contains(who)) {
+        target = who;                       // 이름이 맞는 사람에게만
+      } else if (here.length == 1) {
+        target = here.first;                // 한 명뿐인 방이면 그 사람
+      }
+      // 둘 다 아니면 아무에게도 안 붙인다. 알림 기록과 팝업에는 그대로 남는다.
+      if (target == null) continue;
+
+      final m = alertsFor.putIfAbsent('$r|$target', () => {'fall': 0, 'bedside': 0});
       m[kind] = (m[kind] ?? 0) + 1;
     }
 
@@ -733,9 +763,14 @@ class _StationPageState extends State<StationPage> {
         // 미기록(식사·배설 모두 없음)만 아니면 밸런스를 표시한다.
         'balanceValid': status != '미기록',
         'fallCount':
-            alertsByRoom[roomNo((patientData['room'] ?? '').toString())]?['fall'] ?? 0,
+            alertsFor['${roomNo((patientData['room'] ?? '').toString())}'
+                    '|${key((patientData['name'] ?? '').toString())}']?['fall'] ??
+                0,
         'bedsideCount':
-            alertsByRoom[roomNo((patientData['room'] ?? '').toString())]?['bedside'] ?? 0,
+            alertsFor['${roomNo((patientData['room'] ?? '').toString())}'
+                    '|${key((patientData['name'] ?? '').toString())}']
+                ?['bedside'] ??
+                0,
         'edemaGrade': toInt(assessmentByPatient[patientId]?['edemaGrade']),
         'stoolType': toInt(assessmentByPatient[patientId]?['stoolType']),
         // 주의 해제 여부 + 사유 (간호사가 '확인함'으로 처리한 경우)

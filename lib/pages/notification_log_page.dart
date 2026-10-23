@@ -49,8 +49,17 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
 
   _Filter _filter = _Filter.sensor;
 
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
-  DocumentSnapshot<Map<String, dynamic>>? _cursor;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
+
+  /// 각 쪽의 출발점. `_starts[0]` 은 null(맨 앞)이고, 한 쪽을 꽉 채워 읽을
+  /// 때마다 다음 쪽의 출발점을 하나씩 더해 간다.
+  ///
+  /// Firestore 는 '몇 번째부터' 로 건너뛰지 못하고 '이 문서 다음부터' 로만
+  /// 읽는다. 그래서 가 본 쪽까지만 번호가 생긴다 — 구글 검색이 그렇게
+  /// 생긴 것도 같은 이유다.
+  final List<DocumentSnapshot<Map<String, dynamic>>?> _starts = [null];
+
+  int _page = 0;
   bool _loading = false;
   bool _end = false;
   Object? _error;
@@ -58,20 +67,24 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
   @override
   void initState() {
     super.initState();
-    _load(reset: true);
+    _load(0, reset: true);
   }
 
-  Future<void> _load({bool reset = false}) async {
+  Future<void> _load(int page, {bool reset = false}) async {
     if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
       if (reset) {
-        _docs.clear();
-        _cursor = null;
+        _docs = [];
+        _starts
+          ..clear()
+          ..add(null);
+        _page = 0;
         _end = false;
       }
     });
+    final want = reset ? 0 : page;
     try {
       // 종류로 거르면서 시각으로 정렬하려면 복합 색인이 필요하다.
       // firestore.indexes.json 에 넣어 뒀다.
@@ -80,15 +93,18 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
       final kinds = _filter.kinds;
       if (kinds != null) q = q.where('kind', whereIn: kinds.toList());
       q = q.orderBy('sentAt', descending: true).limit(_pageSize);
-      if (_cursor != null) q = q.startAfterDocument(_cursor!);
+      final from = _starts[want];
+      if (from != null) q = q.startAfterDocument(from);
 
       final snap = await q.get();
       if (!mounted) return;
       setState(() {
-        _docs.addAll(snap.docs);
-        if (snap.docs.isNotEmpty) _cursor = snap.docs.last;
-        // 받은 게 한 쪽보다 적으면 더 없는 것이다.
-        if (snap.docs.length < _pageSize) _end = true;
+        _docs = snap.docs;
+        _page = want;
+        // 한 쪽을 꽉 채워 읽었으면 다음 쪽이 있을 수 있다. 출발점을 적어 둔다.
+        final full = snap.docs.length == _pageSize;
+        _end = !full;
+        if (full && _starts.length == want + 1) _starts.add(snap.docs.last);
         _loading = false;
       });
     } catch (e) {
@@ -103,7 +119,7 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
   void _switch(_Filter f) {
     if (f == _filter) return;
     setState(() => _filter = f);
-    _load(reset: true);
+    _load(0, reset: true);
   }
 
   static const Color mintDark = Color(0xFF16305E);
@@ -474,7 +490,7 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
                 constraints.maxWidth >= 900 ? 640.0 : constraints.maxWidth;
 
             return RefreshIndicator(
-              onRefresh: () => _load(reset: true),
+              onRefresh: () => _load(_page),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Center(
@@ -545,39 +561,64 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
     return Column(
       children: [
         for (final doc in _docs) logTile(context, doc.id, doc.data()),
-        const SizedBox(height: 6),
-        if (_end)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Text(
-              '${_docs.length}건 — 더 없습니다',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: textGrey,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 48,
-            child: OutlinedButton(
-              onPressed: _loading ? null : () => _load(),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: mintDark,
-                side: const BorderSide(color: borderGrey),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: Text(
-                _loading ? '불러오는 중…' : '$_pageSize건 더 보기',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
+        const SizedBox(height: 12),
+        _pager(),
       ],
+    );
+  }
+
+  /// 가 본 쪽까지 번호로, 그 다음은 '다음' 으로.
+  Widget _pager() {
+    final last = _starts.length - 1;
+    if (last == 0 && _end) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          '${_docs.length}건 — 더 없습니다',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: textGrey,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+    final hasNext = _page < last || !_end;
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _pageBtn('‹ 이전', _page > 0 ? _page - 1 : null),
+        for (var i = 0; i <= last; i++)
+          _pageBtn('${i + 1}', i == _page ? null : i, current: i == _page),
+        _pageBtn('다음 ›', hasNext ? _page + 1 : null),
+      ],
+    );
+  }
+
+  Widget _pageBtn(String label, int? go, {bool current = false}) {
+    final on = go != null && !_loading;
+    return SizedBox(
+      height: 38,
+      child: OutlinedButton(
+        onPressed: on ? () => _load(go) : null,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(44, 38),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          backgroundColor: current ? mintDark : Colors.white,
+          foregroundColor: current ? Colors.white : mintDark,
+          disabledForegroundColor: current ? Colors.white : borderGrey,
+          disabledBackgroundColor: current ? mintDark : Colors.white,
+          side: BorderSide(color: current ? mintDark : borderGrey),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle:
+              const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+        ),
+        child: Text(label),
+      ),
     );
   }
 }

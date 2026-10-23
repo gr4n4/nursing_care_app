@@ -146,8 +146,14 @@ class _PatientDayPageState extends State<PatientDayPage> {
             final kind = (d['kind'] ?? '').toString();
             if (kind != 'fall' && kind != 'bedside') return false;
             final name = (d['patientName'] ?? '').toString().trim();
-            // 이름이 같으면 같은 환자로 본다. 병실은 이동할 수 있어 보조 조건으로만 쓴다.
+            // 이름이 같으면 같은 환자다. 병실은 이동할 수 있어 이름이 먼저다.
             if (name.isNotEmpty && name == myName) return true;
+            // 이름이 다르면 같은 방이어도 남의 경보다. 한 방에 침대가
+            // 여럿이면 호실만으로는 누구인지 못 가린다 — 429호에 센서 셋을
+            // 달았더니 한 건이 세 사람에게 다 붙었다.
+            if (name.isNotEmpty) return false;
+            // 이름이 아예 없는 경보(센서에 이름을 안 붙인 기기)는 호실로만
+            // 본다. 아무 데도 안 뜨는 것보다는 방이라도 아는 편이 낫다.
             return myRoom.isNotEmpty && roomNo((d['room'] ?? '').toString()) == myRoom;
           })
           .toList();
