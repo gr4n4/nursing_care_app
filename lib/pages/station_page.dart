@@ -19,6 +19,7 @@ import '../utils/record_export.dart';
 import 'admin_nurse_roster_page.dart';
 import 'login_page.dart';
 import 'notification_settings_page.dart';
+import 'discharged_patients_page.dart';
 import 'patient_day_page.dart';
 import 'nurse_home_page.dart';
 import 'nurse_profile_edit_page.dart';
@@ -278,7 +279,8 @@ class _StationPageState extends State<StationPage> {
     });
   }
 
-  // 웹 대시보드에서도 환자 숨김/복구를 전환할 수 있다. (앱 홈과 동일한 isActive 토글)
+  // 입원/퇴원을 뒤집는다. 끄면 본 목록에서 빠지고 '퇴원 환자' 로 간다.
+  // 기록은 지우지 않는다 — 퇴원해도 그 사람이 있던 동안의 기록은 남아야 한다.
   Future<void> setPatientActive(String patientId, String name, bool active) async {
     try {
       await FirebaseFirestore.instance.collection('patients').doc(patientId).set(
@@ -438,7 +440,7 @@ class _StationPageState extends State<StationPage> {
                                     const TextStyle(fontWeight: FontWeight.w800),
                               ),
                               subtitle: Text(
-                                active ? '대시보드 보임' : '숨김',
+                                active ? '입원 중' : '퇴원 — 보관함에 있음',
                                 style: TextStyle(
                                   color: active
                                       ? const Color(0xFF16305E)
@@ -839,6 +841,11 @@ class _StationPageState extends State<StationPage> {
     }
 
     // 표시 중인 환자 먼저(병실순), 숨김 환자는 아래로.
+    // 퇴원한 사람은 여기 안 둔다. 본 목록에 섞여 있으면 지금 돌봐야 하는
+    // 사람이 묻힌다 — 다섯 명을 보는 병동에서 아홉 줄이 떴다.
+    // 보는 곳은 옆 메뉴의 '퇴원 환자' 다.
+    summaries.removeWhere((s) => s['isActive'] != true);
+
     summaries.sort((a, b) {
       final aHidden = a['isActive'] == true ? 0 : 1;
       final bHidden = b['isActive'] == true ? 0 : 1;
@@ -1052,6 +1059,23 @@ class _StationPageState extends State<StationPage> {
                   );
                 },
               ),
+            ),
+            // 퇴원한 사람은 본 목록에서 빠진다. 기록은 남으므로 여기서 본다.
+            //
+            // 숫자(배지)를 안 붙인다. 그건 '처리할 것이 남았다' 는 빨간
+            // 표시인데, 퇴원자가 넷 있다는 것은 할 일이 아니다.
+            sideMenuButton(
+              icon: Icons.archive_outlined,
+              label: '퇴원 환자',
+              selected: false,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DischargedPatientsPage(),
+                  ),
+                );
+              },
             ),
             sideMenuButton(
               icon: Icons.notifications_active_rounded,
