@@ -5,16 +5,108 @@ import '../utils/notification_kind.dart';
 import '../utils/pressure_site.dart';
 import '../widgets/pressure_snapshot.dart';
 
-/// 지금까지 발송된 기록 누락 알림 목록.
+/// 지금까지 발송된 알림 목록.
 ///
 /// 폰 알림창에 여러 건이 뭉쳐 오면 어떤 환자의 무슨 알림인지 알 수 없어서,
-/// 여기서 한 건씩 펼쳐 본다. 스케줄러(scripts/notify.js)가 발송할 때마다
-/// notification_log 에 남긴 기록을 최신순으로 보여준다.
-class NotificationLogPage extends StatelessWidget {
+/// 여기서 한 건씩 펼쳐 본다.
+///
+/// **종류로 갈라서 본다.** 예전에는 최근 100건을 그냥 보여 줬는데, 식사·배설
+/// 누락이 하루에도 여러 건 쌓여서 낙상이 금방 밀려났다. 실제로 10/15 낙상이
+/// 158번째에 있어 화면에서 볼 수 없었다. 드물게 오는 것일수록 중요한데
+/// 흔한 것에 묻히는 구조였다.
+///
+/// 열 건씩 이어 붙인다. 한 번에 많이 받아 봐야 낙상은 두세 건이고, 그보다
+/// 계속 거슬러 올라갈 수 있는 것이 쓸모 있다.
+class NotificationLogPage extends StatefulWidget {
   const NotificationLogPage({super.key});
 
+  @override
+  State<NotificationLogPage> createState() => _NotificationLogPageState();
+}
+
+/// 무엇만 볼 것인가.
+enum _Filter {
+  /// 센서가 올린 것 — 낙상·걸터앉음·욕창. 드물게 오지만 제일 중요하다.
+  sensor('센서 경보', NotificationKind.criticalKinds),
+
+  /// 스케줄러가 올린 것 — 식사·배설 기록 누락.
+  missing('기록 누락', {'meal', 'output'}),
+
+  all('전체', null);
+
+  final String label;
+
+  /// null 이면 거르지 않는다.
+  final Set<String>? kinds;
+
+  const _Filter(this.label, this.kinds);
+}
+
+class _NotificationLogPageState extends State<NotificationLogPage> {
+  /// 한 번에 열 건씩. 낙상은 드물어서 백 건을 받아도 두세 건이고,
+  /// 그보다 "계속 거슬러 올라갈 수 있는 것" 이 중요하다.
+  static const int _pageSize = 10;
+
+  _Filter _filter = _Filter.sensor;
+
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
+  DocumentSnapshot<Map<String, dynamic>>? _cursor;
+  bool _loading = false;
+  bool _end = false;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(reset: true);
+  }
+
+  Future<void> _load({bool reset = false}) async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      if (reset) {
+        _docs.clear();
+        _cursor = null;
+        _end = false;
+      }
+    });
+    try {
+      // 종류로 거르면서 시각으로 정렬하려면 복합 색인이 필요하다.
+      // firestore.indexes.json 에 넣어 뒀다.
+      Query<Map<String, dynamic>> q =
+          FirebaseFirestore.instance.collection('notification_log');
+      final kinds = _filter.kinds;
+      if (kinds != null) q = q.where('kind', whereIn: kinds.toList());
+      q = q.orderBy('sentAt', descending: true).limit(_pageSize);
+      if (_cursor != null) q = q.startAfterDocument(_cursor!);
+
+      final snap = await q.get();
+      if (!mounted) return;
+      setState(() {
+        _docs.addAll(snap.docs);
+        if (snap.docs.isNotEmpty) _cursor = snap.docs.last;
+        // 받은 게 한 쪽보다 적으면 더 없는 것이다.
+        if (snap.docs.length < _pageSize) _end = true;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
+  }
+
+  void _switch(_Filter f) {
+    if (f == _filter) return;
+    setState(() => _filter = f);
+    _load(reset: true);
+  }
+
   static const Color mintDark = Color(0xFF16305E);
-  static const Color mintSoft = Color(0xFFDCE7F5);
   static const Color pageBg = Color(0xFFF5F7FA);
   static const Color textDark = Color(0xFF0F172A);
   static const Color textGrey = Color(0xFF64748B);
@@ -372,12 +464,6 @@ class NotificationLogPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 최근 100건만. 병동에서 거슬러 볼 만한 범위이고 읽기 비용도 아낀다.
-    final query = FirebaseFirestore.instance
-        .collection('notification_log')
-        .orderBy('sentAt', descending: true)
-        .limit(100);
-
     return Scaffold(
       backgroundColor: pageBg,
       body: SafeArea(
@@ -387,48 +473,24 @@ class NotificationLogPage extends StatelessWidget {
             final maxWidth =
                 constraints.maxWidth >= 900 ? 640.0 : constraints.maxWidth;
 
-            return SingleChildScrollView(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxWidth),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      pageHeader(context),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: query.snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) {
-                              return errorState(snapshot.error!);
-                            }
-                            if (!snapshot.hasData) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 48),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
-
-                            final docs = snapshot.data!.docs;
-                            if (docs.isEmpty) return emptyState();
-
-                            return Column(
-                              children: [
-                                for (final doc in docs)
-                                  logTile(
-                                    context,
-                                    doc.id,
-                                    doc.data() as Map<String, dynamic>,
-                                  ),
-                              ],
-                            );
-                          },
+            return RefreshIndicator(
+              onRefresh: () => _load(reset: true),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        pageHeader(context),
+                        _filterBar(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                          child: _list(),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -436,6 +498,86 @@ class NotificationLogPage extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+
+  Widget _filterBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+      child: Row(
+        children: [
+          for (final f in _Filter.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(f.label),
+                selected: _filter == f,
+                onSelected: (_) => _switch(f),
+                showCheckmark: false,
+                labelStyle: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: _filter == f ? Colors.white : textGrey,
+                ),
+                selectedColor: mintDark,
+                backgroundColor: Colors.white,
+                side: BorderSide(
+                  color: _filter == f ? mintDark : borderGrey,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _list() {
+    if (_error != null) return errorState(_error!);
+    if (_docs.isEmpty) {
+      if (_loading) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      return emptyState();
+    }
+    return Column(
+      children: [
+        for (final doc in _docs) logTile(context, doc.id, doc.data()),
+        const SizedBox(height: 6),
+        if (_end)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Text(
+              '${_docs.length}건 — 더 없습니다',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: textGrey,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 48,
+            child: OutlinedButton(
+              onPressed: _loading ? null : () => _load(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: mintDark,
+                side: const BorderSide(color: borderGrey),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                _loading ? '불러오는 중…' : '$_pageSize건 더 보기',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
