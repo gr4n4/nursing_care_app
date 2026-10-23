@@ -75,13 +75,41 @@ class _PatientDayPageState extends State<PatientDayPage> {
   int intakeMl = 0;
   int outputMl = 0;
 
-  String get dateKey => careDateKey(DateTime.now());
-  String get dateText => careDateDisplay(DateTime.now());
-  String get weekdayText => careWeekday(DateTime.now());
+  /// 보고 있는 간호일. 오늘로 시작하고 앞뒤로 옮길 수 있다.
+  ///
+  /// 예전에는 늘 오늘이었다. 그러면 "지난주에 얼마나 드셨냐" 를 볼 데가
+  /// 없고, 퇴원한 분은 아예 볼 수가 없다 — 그분들 기록은 전부 과거다.
+  late String dateKey = careDateKey(DateTime.now());
+
+  /// 오늘 간호일. 이보다 앞으로는 못 간다.
+  final String _todayKey = careDateKey(DateTime.now());
+
+  bool get _isToday => dateKey == _todayKey;
+  String get dateText => careKeyDisplay(dateKey);
 
   @override
   void initState() {
     super.initState();
+    load();
+  }
+
+  /// 하루 옮기기. 앞으로는 오늘까지만.
+  void _move(int days) {
+    final next = careKeyShift(dateKey, days);
+    if (next.compareTo(_todayKey) > 0) return;
+    setState(() => dateKey = next);
+    load();
+  }
+
+  Future<void> _pickDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: careDayOfKey(dateKey),
+      firstDate: DateTime(2025),
+      lastDate: careDayOfKey(_todayKey),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => dateKey = careDateKeyOfDay(picked));
     load();
   }
 
@@ -124,11 +152,21 @@ class _PatientDayPageState extends State<PatientDayPage> {
           .get();
 
       // 센서 경보는 emfit_server 가 보내는 것이라 patientId 가 없다.
-      // 병실+이름으로 맞춘다. 정렬만 걸어 최근 것을 받아 거르므로 복합 색인이 없어도 된다.
+      // 병실+이름으로 맞춘다.
+      //
+      // **보고 있는 간호일 구간만** 가져온다. 예전에는 최근 100건을 받아
+      // 걸렀는데, 그러면 어제 화면에 오늘 낙상이 떴다. 이 화면은 '그 사람의
+      // 그날' 이라 그날 것만 있어야 한다.
+      //
+      // 알림 기록에는 date 필드가 없고 발송 시각(sentAt)뿐이라 구간으로
+      // 찾는다. 한 필드 범위 조건이라 복합 색인이 필요 없다.
       final alertSnap = await db
           .collection('notification_log')
+          .where('sentAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(careDayStart(dateKey)))
+          .where('sentAt',
+              isLessThan: Timestamp.fromDate(careDayEnd(dateKey)))
           .orderBy('sentAt', descending: true)
-          .limit(100)
           .get();
 
       // 병실 표기가 양쪽에서 다르다. 앱은 '신관 421', 센서는 '421' 로 보낸다.
@@ -914,16 +952,92 @@ class _PatientDayPageState extends State<PatientDayPage> {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            '$dateText ($weekdayText) · 하루 기준 오전 7시',
-            style: const TextStyle(
-              color: Color(0xE6FFFFFF),
-              fontSize: 13,
+          const SizedBox(height: 8),
+          // 날짜를 옮길 수 있게 한다. 이 화면은 '그 사람의 그날' 이다.
+          Row(
+            children: [
+              _dayArrow(Icons.chevron_left_rounded, '어제', () => _move(-1)),
+              const SizedBox(width: 2),
+              InkWell(
+                onTap: _pickDay,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        dateText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Icon(Icons.calendar_today_rounded,
+                          color: Color(0xCCFFFFFF), size: 14),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              // 오늘보다 앞으로는 못 간다. 아직 오지 않은 날이다.
+              _dayArrow(Icons.chevron_right_rounded, '내일',
+                  _isToday ? null : () => _move(1)),
+              const SizedBox(width: 6),
+              if (!_isToday)
+                InkWell(
+                  onTap: () {
+                    setState(() => dateKey = _todayKey);
+                    load();
+                  },
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33FFFFFF),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      '오늘로',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '하루 기준 오전 7시',
+            style: TextStyle(
+              color: Color(0xB3FFFFFF),
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _dayArrow(IconData icon, String tip, VoidCallback? onTap) {
+    return IconButton(
+      onPressed: onTap,
+      tooltip: tip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      icon: Icon(
+        icon,
+        size: 24,
+        color: onTap == null ? const Color(0x55FFFFFF) : Colors.white,
       ),
     );
   }

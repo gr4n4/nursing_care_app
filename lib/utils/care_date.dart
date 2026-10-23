@@ -76,3 +76,23 @@ String careDateKeyOfDay(DateTime day) =>
     '${day.year}-'
     '${day.month.toString().padLeft(2, '0')}-'
     '${day.day.toString().padLeft(2, '0')}';
+
+/// 간호일 키의 달력 날짜(자정). 키를 화면에 적거나 앞뒤로 옮길 때 쓴다.
+DateTime careDayOfKey(String dateKey) {
+  final p = dateKey.split('-');
+  return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+}
+
+/// 간호일 키를 [days] 만큼 옮긴다. 음수면 과거로.
+String careKeyShift(String dateKey, int days) =>
+    careDateKeyOfDay(careDayOfKey(dateKey).add(Duration(days: days)));
+
+/// 키를 화면용으로. 예: 2026.09.30 (화)
+String careKeyDisplay(String dateKey) {
+  const names = ['월', '화', '수', '목', '금', '토', '일'];
+  final d = careDayOfKey(dateKey);
+  return '${d.year}.'
+      '${d.month.toString().padLeft(2, '0')}.'
+      '${d.day.toString().padLeft(2, '0')}'
+      ' (${names[d.weekday - 1]})';
+}

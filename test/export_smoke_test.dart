@@ -9,6 +9,32 @@ import 'package:nursing_care_app/utils/xlsx.dart';
 /// excel 패키지를 걷어낸 이유는 xlsx.dart 의 주석에 있다 — 그쪽은 새 파일을
 /// 만들 때 템플릿을 풀어야 해서 wasm 빌드에서 죽었다.
 void main() {
+  group('간호일 앞뒤로 옮기기', () {
+    test('하루씩 옮긴다', () {
+      expect(careKeyShift('2026-10-23', -1), '2026-10-22');
+      expect(careKeyShift('2026-10-23', 1), '2026-10-24');
+    });
+
+    test('달과 해를 넘긴다', () {
+      expect(careKeyShift('2026-03-01', -1), '2026-02-28');
+      expect(careKeyShift('2026-01-01', -1), '2025-12-31');
+      expect(careKeyShift('2026-12-31', 1), '2027-01-01');
+    });
+
+    test('옮겨도 간호일 구간이 따라온다', () {
+      // 화면에서 하루 뒤로 가면 자료를 찾는 구간도 같이 하루 뒤여야 한다.
+      final a = careDayStart(careKeyShift('2026-10-23', -1));
+      expect(a, DateTime(2026, 10, 22, 7));
+      expect(careDayEnd(careKeyShift('2026-10-23', -1)),
+          DateTime(2026, 10, 23, 7));
+    });
+
+    test('화면 글자에 요일이 붙는다', () {
+      // 2026-10-23 은 금요일.
+      expect(careKeyDisplay('2026-10-23'), '2026.10.23 (금)');
+    });
+  });
+
   group('달력 하루로 다시 묶기', () {
     // 기록은 간호일(date)과 벽시계 시각(time)을 같이 들고 있다. 그래서
     // 질의를 새로 짜지 않고 다시 묶을 수 있다.
