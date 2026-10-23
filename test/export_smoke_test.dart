@@ -9,6 +9,31 @@ import 'package:nursing_care_app/utils/xlsx.dart';
 /// excel 패키지를 걷어낸 이유는 xlsx.dart 의 주석에 있다 — 그쪽은 새 파일을
 /// 만들 때 템플릿을 풀어야 해서 wasm 빌드에서 죽었다.
 void main() {
+  group('달력에서 고른 날짜는 빼지 않는다', () {
+    // 두 번 틀린 자리다. v2.3.2 에서 자료를 찾는 쪽을 고쳤는데, 화면에
+    // 적는 글자는 그대로 둬서 "21일을 골랐는데 20일로 보인다" 가 됐다.
+    //
+    // careDateKey/careDateDisplay 는 '이 **시각**이 어느 간호일인가' 를
+    // 가리는 함수라 7시간을 뺀다. 달력이 주는 자정에서 빼면 전날이 된다.
+    final picked = DateTime(2026, 10, 21);
+
+    test('키로 만들 때', () {
+      expect(careDateKeyOfDay(picked), '2026-10-21');
+      expect(careDateKey(picked), '2026-10-20'); // 이것을 쓰면 안 된다
+    });
+
+    test('화면에 적을 때', () {
+      expect(careKeyDisplay(careDateKeyOfDay(picked)), '2026.10.21 (수)');
+      expect(careDateDisplay(picked), '2026.10.20'); // 이것을 쓰면 안 된다
+    });
+
+    test('실제 시각에는 careDateKey 가 맞다', () {
+      // 새벽 3시 기록은 그 밤을 지킨 사람의 하루에 들어가야 한다.
+      expect(careDateKey(DateTime(2026, 10, 21, 3, 0)), '2026-10-20');
+      expect(careDateKey(DateTime(2026, 10, 21, 8, 0)), '2026-10-21');
+    });
+  });
+
   group('간호일 앞뒤로 옮기기', () {
     test('하루씩 옮긴다', () {
       expect(careKeyShift('2026-10-23', -1), '2026-10-22');

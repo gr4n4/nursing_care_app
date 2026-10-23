@@ -120,7 +120,11 @@ class _StationPageState extends State<StationPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          careDateDisplay(value),
+                          // 달력에서 고른 날짜는 자정으로 온다. careDateDisplay
+                          // 는 '이 시각이 어느 간호일인가' 를 가리는 함수라
+                          // 7시간을 빼는데, 자정에서 빼면 전날이 된다.
+                          // 고른 날짜는 이미 그 간호일이라 빼면 안 된다.
+                          careKeyDisplay(careDateKeyOfDay(value)),
                           style: const TextStyle(
                             color: Color(0xFF0F172A),
                             fontSize: 15,
