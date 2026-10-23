@@ -45,6 +45,12 @@ class DeliveryWatcher {
   /// 이미 본 요청. 화면을 열 때 쌓여 있던 것까지 소리내지 않으려고 쓴다.
   static final Set<String> _seen = <String>{};
 
+  /// 적재 자리에 도착했다고 이미 알린 건.
+  ///
+  /// 상태가 at_loading 인 동안 스냅샷은 여러 번 온다. 들어온 **그 순간**
+  /// 한 번만 알려야 해서 따로 센다.
+  static final Set<String> _toldLoading = <String>{};
+
   /// 첫 응답을 받았는가. 첫 응답은 '새로 온 것'이 아니라 '원래 있던 것'이다.
   static bool _primed = false;
 
@@ -94,11 +100,19 @@ class DeliveryWatcher {
         // 소리와 팝업은 '새로 올라온 요청' 에만 쓴다. 진행 중인 건이
         // 상태를 바꿀 때마다 울리면 한 건에 네 번 울린다.
         final fresh = <DeliveryRequest>[];
+        final loading = <DeliveryRequest>[];
         for (final doc in snap.docs) {
           final st = (doc.data()['status'] ?? '').toString();
-          if (st != DeliveryStatus.requested) continue;
-          if (_seen.add(doc.id) && _primed) {
-            fresh.add(DeliveryRequest.fromDoc(doc));
+          if (st == DeliveryStatus.requested) {
+            if (_seen.add(doc.id) && _primed) {
+              fresh.add(DeliveryRequest.fromDoc(doc));
+            }
+          } else if (st == DeliveryStatus.atLoading) {
+            // 로봇이 적재 자리에 섰다. 버튼이 '물품 실었음·출발' 로 바뀌지만
+            // 다른 일 하는 중이면 바뀐 줄 모른다. 로봇은 그동안 서 있다.
+            if (_toldLoading.add(doc.id) && _primed) {
+              loading.add(DeliveryRequest.fromDoc(doc));
+            }
           }
         }
 
@@ -107,12 +121,18 @@ class DeliveryWatcher {
         _seen.removeWhere((id) => !snap.docs.any((d) =>
             d.id == id &&
             (d.data()['status'] ?? '') == DeliveryStatus.requested));
+        _toldLoading.removeWhere((id) => !snap.docs.any((d) =>
+            d.id == id &&
+            (d.data()['status'] ?? '') == DeliveryStatus.atLoading));
 
         if (!_primed) {
           _primed = true;
           return;
         }
-        if (announce && fresh.isNotEmpty) _announce(navigatorKey, fresh);
+        if (!announce) return;
+        if (fresh.isNotEmpty) _announce(navigatorKey, fresh);
+        // 적재 알림이 더 급하다 — 로봇이 이미 와서 서 있는 상태다.
+        if (loading.isNotEmpty) _announce(navigatorKey, loading, loading: true);
       },
       onError: (Object e) {
         // 못 지켜봐도 배차 화면에서 직접 볼 수 있다. 대시보드를 막지 않는다.
@@ -125,6 +145,7 @@ class DeliveryWatcher {
     _sub?.cancel();
     _sub = null;
     _seen.clear();
+    _toldLoading.clear();
     _primed = false;
     pending.value = 0;
     arrived.value = 0;
@@ -137,8 +158,9 @@ class DeliveryWatcher {
 
   static void _announce(
     GlobalKey<NavigatorState> navigatorKey,
-    List<DeliveryRequest> fresh,
-  ) {
+    List<DeliveryRequest> fresh, {
+    bool loading = false,
+  }) {
     _ding();
 
     final context = navigatorKey.currentContext;
@@ -152,7 +174,7 @@ class DeliveryWatcher {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _RequestDialog(fresh: fresh),
+      builder: (ctx) => _RequestDialog(fresh: fresh, loading: loading),
     ).whenComplete(() => _dialogOpen = false);
   }
 
@@ -194,7 +216,10 @@ class DeliveryWatcher {
 class _RequestDialog extends StatelessWidget {
   final List<DeliveryRequest> fresh;
 
-  const _RequestDialog({required this.fresh});
+  /// 로봇이 적재 자리에 도착했다는 알림인가. 아니면 새 요청 알림.
+  final bool loading;
+
+  const _RequestDialog({required this.fresh, this.loading = false});
 
   static const Color brand = Color(0xFF16305E);
   static const Color brandSoft = Color(0xFFDCE7F5);
@@ -231,8 +256,10 @@ class _RequestDialog extends StatelessWidget {
                       color: brandSoft,
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Icon(
-                      Icons.local_shipping_rounded,
+                    child: Icon(
+                      loading
+                          ? Icons.inventory_2_rounded
+                          : Icons.local_shipping_rounded,
                       color: brand,
                       size: 28,
                     ),
@@ -240,9 +267,11 @@ class _RequestDialog extends StatelessWidget {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
-                      fresh.length > 1
-                          ? '새 물품 요청 ${fresh.length}건'
-                          : '새 물품 요청',
+                      loading
+                          ? '로봇이 적재 자리에 도착했습니다'
+                          : fresh.length > 1
+                              ? '새 물품 요청 ${fresh.length}건'
+                              : '새 물품 요청',
                       style: const TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
@@ -266,21 +295,52 @@ class _RequestDialog extends StatelessWidget {
                         color: textDark,
                         fontWeight: FontWeight.w600,
                       ),
-                      children: [
-                        TextSpan(
-                          text: _roomLabel(r.room),
-                          style: const TextStyle(
-                            color: brand,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const TextSpan(text: '에서 '),
-                        TextSpan(
-                          text: r.itemsText,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        const TextSpan(text: ' 물품 요청이 있습니다.'),
-                      ],
+                      children: loading
+                          ? [
+                              TextSpan(
+                                text: r.itemsText,
+                                style: const TextStyle(
+                                  color: brand,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const TextSpan(text: ' 을(를) 실어 주세요. '),
+                              TextSpan(
+                                text: _roomLabel(r.room),
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                              const TextSpan(text: ' 로 갑니다.'),
+                            ]
+                          : [
+                              TextSpan(
+                                text: _roomLabel(r.room),
+                                style: const TextStyle(
+                                  color: brand,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const TextSpan(text: '에서 '),
+                              TextSpan(
+                                text: r.itemsText,
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                              const TextSpan(text: ' 물품 요청이 있습니다.'),
+                            ],
+                    ),
+                  ),
+                ),
+              if (loading)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '다 실으시면 배차 화면에서 [물품 실었음 · 출발] 을 눌러 주세요. 누를 때까지 로봇은 그 자리에 서 있습니다.',
+                    style: TextStyle(
+                      color: textGrey,
+                      fontSize: 14,
+                      height: 1.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

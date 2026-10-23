@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nursing_care_app/utils/floor_map.dart';
 
@@ -56,6 +58,45 @@ void main() {
       final sx = ward.a.abs() + ward.d.abs();
       final sy = ward.b.abs() + ward.e.abs();
       expect(sx, isNot(closeTo(sy, 0.01)));
+    });
+  });
+
+  group('화살표 방향', () {
+    // 로봇이 420 에서 430 쪽(복도 동쪽)을 보고 있을 때의 yaw.
+    // 두 waypoint 를 잇는 방향이다.
+    final alongCorridor = math.atan2(-26.089 - (-0.332), 0.862 - (-4.484));
+
+    test('복도를 따라 보면 도면에서도 가로로 눕는다', () {
+      // 병동 복도는 도면에서 거의 수평이고, 430 은 420 의 오른쪽이다.
+      // 화살표가 오른쪽(+x)을 가리켜야 한다.
+      final h = ward.headingOnImage(alongCorridor);
+      expect(h.abs(), lessThan(0.12), reason: '수평에서 7도 넘게 벗어남');
+    });
+
+    test('yaw 를 그대로 쓰지 않는다', () {
+      // 점유격자가 도면에 대해 78도쯤 돌아가 있다. 변환을 빠뜨리면
+      // 화살표가 엉뚱한 데를 가리키는데, 화면만 봐서는 알아채기 어렵다.
+      expect((ward.headingOnImage(0) - 0).abs(), greaterThan(1.0));
+    });
+
+    test('90도 돌리면 화면에서도 90도 돌아간다', () {
+      double diff(double a, double b) {
+        var t = a - b;
+        while (t > math.pi) {
+          t -= 2 * math.pi;
+        }
+        while (t < -math.pi) {
+          t += 2 * math.pi;
+        }
+        return t.abs();
+      }
+
+      final d = diff(
+        ward.headingOnImage(math.pi / 2),
+        ward.headingOnImage(0),
+      );
+      // 가로·세로 배율이 3% 달라 정확히 90도는 아니다.
+      expect(d, closeTo(math.pi / 2, 0.06));
     });
   });
 

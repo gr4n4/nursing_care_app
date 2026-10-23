@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
@@ -88,6 +90,19 @@ class FloorMap {
     return (x: px, y: py);
   }
 
+  /// 로봇이 보는 방향(yaw, 라디안)을 도면 그림 위의 각도로 바꾼다.
+  ///
+  /// 좌표와 같은 변환을 거쳐야 한다. 지도가 도면에 대해 78도쯤 돌아가 있어서,
+  /// yaw 를 그대로 쓰면 화살표가 엉뚱한 데를 가리킨다.
+  ///
+  /// 방향만 필요하므로 아핀의 **선형 부분**만 쓴다(이동은 방향을 안 바꾼다).
+  /// 가로·세로 배율이 3% 쯤 달라 각도가 그만큼 비뚤어지는데, 화살표로
+  /// 보기에는 차이가 없다.
+  double headingOnImage(double yaw) {
+    final cx = math.cos(yaw), cy = math.sin(yaw);
+    return math.atan2(d * cx + e * cy, a * cx + b * cy);
+  }
+
   static FloorMap? _one(String name, Map<String, dynamic> m) {
     final t = m['transform'];
     if (t is! Map) return null;
@@ -141,6 +156,9 @@ class RobotPose {
   final double x;
   final double y;
 
+  /// 로봇이 보는 방향(라디안). 로봇이 안 보내면 null.
+  final double? yaw;
+
   /// 어느 지도 위의 좌표인가(`ward_edit` / `lab_4F`).
   ///
   /// 이 이름으로 보정값을 고른다. 이름이 안 맞으면 점을 안 그린다 —
@@ -155,6 +173,7 @@ class RobotPose {
     required this.x,
     required this.y,
     required this.map,
+    this.yaw,
     this.at,
   });
 
@@ -166,9 +185,11 @@ class RobotPose {
     if (p is! Map) return null;
     final x = p['x'], y = p['y'];
     if (x is! num || y is! num) return null;
+    final yaw = p['yaw'];
     return RobotPose(
       x: x.toDouble(),
       y: y.toDouble(),
+      yaw: yaw is num ? yaw.toDouble() : null,
       map: (d['map'] ?? '').toString(),
       at: _time(d['updatedAt']),
     );

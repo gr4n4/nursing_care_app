@@ -89,6 +89,9 @@ class _RobotMapViewState extends State<RobotMapView> {
             return _frame(
               floor,
               spot,
+              // 로봇이 보는 방향. 지도가 도면에 대해 돌아가 있어서 좌표와
+              // 같은 변환을 거쳐야 화살표가 맞는 데를 가리킨다.
+              pose?.yaw == null ? null : floor.headingOnImage(pose!.yaw!),
               age == null || age > _fresh,
               _note(snap, d, pose, mapName, known, spot),
             );
@@ -123,6 +126,7 @@ class _RobotMapViewState extends State<RobotMapView> {
   Widget _frame(
     FloorMap floor,
     ({double x, double y})? spot,
+    double? heading,
     bool stale,
     String? note,
   ) {
@@ -164,9 +168,9 @@ class _RobotMapViewState extends State<RobotMapView> {
                             // 로봇이 2초마다 올리니 2초에 걸쳐 미끄러진다.
                             duration: const Duration(seconds: 2),
                             curve: Curves.linear,
-                            left: spot.x * scale - 11,
-                            top: spot.y * scale - 11,
-                            child: _Dot(faded: stale),
+                            left: spot.x * scale - _Dot.size / 2,
+                            top: spot.y * scale - _Dot.size / 2,
+                            child: _Dot(heading: heading, faded: stale),
                           ),
                       ],
                     ),
@@ -232,32 +236,153 @@ class _RobotMapViewState extends State<RobotMapView> {
   }
 }
 
-class _Dot extends StatelessWidget {
+/// 로봇 자리에 찍는 표시.
+///
+/// 레이더에 잡힌 물체처럼 파동이 퍼진다. 가만히 있는 점은 "지금 저기 있다"
+/// 와 "아까 저기 있었다" 가 구분이 안 되는데, 맥이 뛰면 살아 있는 값으로
+/// 읽힌다.
+///
+/// 방향을 아는 동안에는 화살표가 된다. 로봇이 어디를 보고 있는지가
+/// 복도에서 마주칠 때 쓸모가 있다 — 오는 중인지 가는 중인지.
+class _Dot extends StatefulWidget {
+  /// 도면 위에서 로봇이 향한 각도(라디안). 모르면 null 이고 그때는 동그라미다.
+  final double? heading;
+
   /// 한동안 새 좌표가 안 왔다. 자리는 맞을 수도 있지만 최신은 아니다.
   final bool faded;
 
-  const _Dot({required this.faded});
+  /// 파동까지 담을 네모의 한 변.
+  static const double size = 64;
+
+  const _Dot({required this.heading, required this.faded});
+
+  @override
+  State<_Dot> createState() => _DotState();
+}
+
+class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _Dot old) {
+    super.didUpdateWidget(old);
+    // 소식이 끊긴 동안에는 맥을 멈춘다. 계속 뛰면 끊긴 줄 모른다.
+    if (widget.faded && _pulse.isAnimating) {
+      _pulse.stop();
+    } else if (!widget.faded && !_pulse.isAnimating) {
+      _pulse.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: faded ? 0.42 : 1,
-      child: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: AppColors.danger,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.danger.withValues(alpha: 0.35),
-              blurRadius: 9,
-              spreadRadius: 2,
-            ),
-          ],
+    // 움직임을 줄여 달라고 한 사람에게는 파동을 안 보인다.
+    final still = MediaQuery.of(context).disableAnimations || widget.faded;
+    return SizedBox(
+      width: _Dot.size,
+      height: _Dot.size,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, _) => CustomPaint(
+          painter: _DotPainter(
+            heading: widget.heading,
+            pulse: still ? null : _pulse.value,
+            faded: widget.faded,
+          ),
         ),
       ),
     );
   }
+}
+
+class _DotPainter extends CustomPainter {
+  final double? heading;
+
+  /// 0→1 을 되풀이한다. null 이면 파동을 안 그린다.
+  final double? pulse;
+
+  final bool faded;
+
+  const _DotPainter({
+    required this.heading,
+    required this.pulse,
+    required this.faded,
+  });
+
+  static const Color _red = Color(0xFFDC2626);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final o = faded ? 0.45 : 1.0;
+
+    // 파동 — 두 겹을 엇갈려 퍼뜨린다. 한 겹이면 사라진 뒤 빈 틈이 생긴다.
+    final p = pulse;
+    if (p != null) {
+      for (final phase in const [0.0, 0.5]) {
+        final t = (p + phase) % 1.0;
+        canvas.drawCircle(
+          c,
+          9 + t * 21,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.2 * (1 - t)
+            ..color = _red.withValues(alpha: (1 - t) * 0.5),
+        );
+      }
+    }
+
+    final fill = Paint()..color = _red.withValues(alpha: o);
+    final edge = Paint()
+      ..color = Colors.white.withValues(alpha: o)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6;
+
+    if (heading == null) {
+      // 방향을 모르면 동그라미. 모르는 것을 아는 척하지 않는다.
+      canvas.drawCircle(c, 8, fill);
+      canvas.drawCircle(c, 8, edge);
+      return;
+    }
+
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(heading!);
+
+    // 꼬리는 둥글고 머리는 뾰족한 화살표. 가리키는 쪽이 한눈에 들어온다.
+    const tail = -11.0, neck = 2.0, tip = 14.0, half = 4.6, barb = 9.0;
+    final body = Path()
+      ..moveTo(tail + 4, -half)
+      ..lineTo(neck, -half)
+      ..lineTo(neck, -barb)
+      ..lineTo(tip, 0)
+      ..lineTo(neck, barb)
+      ..lineTo(neck, half)
+      ..lineTo(tail + 4, half)
+      ..arcToPoint(Offset(tail + 4, -half),
+          radius: const Radius.circular(half), clockwise: true)
+      ..close();
+    canvas.drawPath(body, edge);
+    canvas.drawPath(body, fill);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_DotPainter old) =>
+      old.heading != heading || old.pulse != pulse || old.faded != faded;
 }
