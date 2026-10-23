@@ -49,6 +49,13 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
 
   _Filter _filter = _Filter.sensor;
 
+  /// 환자 이름으로 좁히기. 비어 있으면 안 쓴다.
+  ///
+  /// 퇴원해서 환자 목록에 없는 사람도 찾을 수 있어야 한다. 알림에 찍힌
+  /// 이름은 보낼 때 박제된 값이라, 나중에 그 침대 주인이 바뀌어도 그대로다.
+  final _nameCtl = TextEditingController();
+  String _name = '';
+
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _docs = [];
 
   /// 각 쪽의 출발점. `_starts[0]` 은 null(맨 앞)이고, 한 쪽을 꽉 채워 읽을
@@ -68,6 +75,12 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
   void initState() {
     super.initState();
     _load(0, reset: true);
+  }
+
+  @override
+  void dispose() {
+    _nameCtl.dispose();
+    super.dispose();
   }
 
   Future<void> _load(int page, {bool reset = false}) async {
@@ -90,9 +103,20 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
       // firestore.indexes.json 에 넣어 뒀다.
       Query<Map<String, dynamic>> q =
           FirebaseFirestore.instance.collection('notification_log');
-      final kinds = _filter.kinds;
-      if (kinds != null) q = q.where('kind', whereIn: kinds.toList());
-      q = q.orderBy('sentAt', descending: true).limit(_pageSize);
+      if (_name.isNotEmpty) {
+        // 이름으로 찾을 때는 종류를 안 가린다 — "그 사람 것 전부" 가 목적이다.
+        // 앞글자만 맞아도 찾게 한다('심' -> 심영순).
+        q = q
+            .where('patientName', isGreaterThanOrEqualTo: _name)
+            .where('patientName', isLessThan: '$_name')
+            .orderBy('patientName')
+            .orderBy('sentAt', descending: true);
+      } else {
+        final kinds = _filter.kinds;
+        if (kinds != null) q = q.where('kind', whereIn: kinds.toList());
+        q = q.orderBy('sentAt', descending: true);
+      }
+      q = q.limit(_pageSize);
       final from = _starts[want];
       if (from != null) q = q.startAfterDocument(from);
 
@@ -119,6 +143,13 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
   void _switch(_Filter f) {
     if (f == _filter) return;
     setState(() => _filter = f);
+    _load(0, reset: true);
+  }
+
+  void _search(String v) {
+    final t = v.trim();
+    if (t == _name) return;
+    setState(() => _name = t);
     _load(0, reset: true);
   }
 
@@ -520,28 +551,90 @@ class _NotificationLogPageState extends State<NotificationLogPage> {
   Widget _filterBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final f in _Filter.values)
+          TextField(
+            controller: _nameCtl,
+            onSubmitted: _search,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '환자 이름으로 찾기 (퇴원한 분도 찾아집니다)',
+              hintStyle: const TextStyle(
+                color: textGrey,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _name.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      tooltip: '지우기',
+                      onPressed: () {
+                        _nameCtl.clear();
+                        _search('');
+                      },
+                    ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: borderGrey),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: borderGrey),
+              ),
+            ),
+          ),
+          if (_name.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(f.label),
-                selected: _filter == f,
-                onSelected: (_) => _switch(f),
-                showCheckmark: false,
-                labelStyle: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: _filter == f ? Colors.white : textGrey,
-                ),
-                selectedColor: mintDark,
-                backgroundColor: Colors.white,
-                side: BorderSide(
-                  color: _filter == f ? mintDark : borderGrey,
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                "'$_name' 로 찾는 중 — 종류와 상관없이 모두 보여줍니다.",
+                style: const TextStyle(
+                  color: textGrey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
+          const SizedBox(height: 10),
+          // 이름으로 찾는 동안에는 종류를 안 가린다. 눌러도 안 먹히므로 흐려 둔다.
+          Opacity(
+            opacity: _name.isEmpty ? 1 : 0.4,
+            child: IgnorePointer(
+              ignoring: _name.isNotEmpty,
+              child: Row(
+                children: [
+                  for (final f in _Filter.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(f.label),
+                        selected: _filter == f,
+                        onSelected: (_) => _switch(f),
+                        showCheckmark: false,
+                        labelStyle: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: _filter == f ? Colors.white : textGrey,
+                        ),
+                        selectedColor: mintDark,
+                        backgroundColor: Colors.white,
+                        side: BorderSide(
+                          color: _filter == f ? mintDark : borderGrey,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
