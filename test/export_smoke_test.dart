@@ -9,6 +9,40 @@ import 'package:nursing_care_app/utils/xlsx.dart';
 /// excel 패키지를 걷어낸 이유는 xlsx.dart 의 주석에 있다 — 그쪽은 새 파일을
 /// 만들 때 템플릿을 풀어야 해서 wasm 빌드에서 죽었다.
 void main() {
+  group('달력 하루로 다시 묶기', () {
+    // 기록은 간호일(date)과 벽시계 시각(time)을 같이 들고 있다. 그래서
+    // 질의를 새로 짜지 않고 다시 묶을 수 있다.
+    //
+    //   달력 10/23 = (간호일 10/22 중 07:00 이전) + (간호일 10/23 중 07:00 이후)
+    bool beforeSeven(String t) => t.length >= 5 && t.compareTo('07:00') < 0;
+
+    test('07시가 경계다', () {
+      expect(beforeSeven('06:59'), isTrue);
+      expect(beforeSeven('07:00'), isFalse);
+      expect(beforeSeven('00:00'), isTrue);
+      expect(beforeSeven('23:59'), isFalse);
+    });
+
+    test('시각이 없으면 전날로 넘기지 않는다', () {
+      // 없는 것을 전날로 떠넘기면 그날 자료에서 조용히 사라진다.
+      expect(beforeSeven(''), isFalse);
+      expect(beforeSeven('7'), isFalse);
+    });
+
+    test('앞 간호일 키는 하루를 뺀다', () {
+      String prev(String k) {
+        final d = DateTime.parse(k).subtract(const Duration(days: 1));
+        return '${d.year.toString().padLeft(4, '0')}-'
+            '${d.month.toString().padLeft(2, '0')}-'
+            '${d.day.toString().padLeft(2, '0')}';
+      }
+
+      expect(prev('2026-10-23'), '2026-10-22');
+      expect(prev('2026-01-01'), '2025-12-31');  // 해 넘김
+      expect(prev('2026-03-01'), '2026-02-28');  // 달 넘김
+    });
+  });
+
   test('시트 4개짜리 xlsx 가 zip 으로 인코딩된다', () {
     final book = XlsxWorkbook();
 

@@ -22,12 +22,21 @@ import 'xlsx.dart';
 class RecordExport {
   /// 여러 날짜를 고르면 날짜별로 파일을 하나씩 만들어 zip으로 묶는다.
   /// 한 파일에 여러 날을 몰아넣으면 메디로에 옮길 때 날짜를 골라내야 해서 번거롭다.
-  static Future<void> exportDates(List<DateTime> dates) async {
+  /// [calendarDay] 가 참이면 00:00~24:00 로 끊는다. 거짓이면 간호일
+  /// (07시~다음날 07시) 그대로다.
+  ///
+  /// 화면은 간호일로 센다 — 새벽 3시 기록은 그 밤을 지킨 사람의 하루에
+  /// 들어가야 한다. 다만 기관에 내는 자료는 달력 하루라야 말이 되고,
+  /// 그래서 받는 쪽만 고를 수 있게 했다.
+  static Future<void> exportDates(
+    List<DateTime> dates, {
+    bool calendarDay = true,
+  }) async {
     if (dates.isEmpty) return;
 
     if (dates.length == 1) {
       final key = careDateKeyOfDay(dates.first);
-      final bytes = await _buildWorkbook(key);
+      final bytes = await _buildWorkbook(key, calendarDay);
       _download('NRCarec_섭취배설_$key.xlsx', bytes);
       return;
     }
@@ -35,7 +44,7 @@ class RecordExport {
     final archive = Archive();
     for (final d in dates) {
       final key = careDateKeyOfDay(d);
-      final bytes = await _buildWorkbook(key);
+      final bytes = await _buildWorkbook(key, calendarDay);
       archive.addFile(ArchiveFile('NRCarec_섭취배설_$key.xlsx', bytes.length, bytes));
     }
 
@@ -48,8 +57,8 @@ class RecordExport {
 
   // ---------- 엑셀 만들기 ----------
 
-  static Future<List<int>> _buildWorkbook(String dateKey) async {
-    final data = await _loadDay(dateKey);
+  static Future<List<int>> _buildWorkbook(String dateKey, bool calendarDay) async {
+    final data = await _loadDay(dateKey, calendarDay);
 
     final book = XlsxWorkbook();
     _writeFormSheet(book.addSheet('기록지'), dateKey, data);
@@ -262,28 +271,81 @@ class RecordExport {
     }
   }
 
-  static Future<_DayData> _loadDay(String dateKey) async {
+  /// 달력 하루로 끊을 때 쓸 바로 앞 간호일.
+  ///
+  /// 기록에는 간호일(`date`)과 벽시계 시각(`time`)이 같이 들어 있다. 그래서
+  /// 질의를 새로 짜지 않고도 다시 묶을 수 있다.
+  ///
+  ///     달력 10/23 = (간호일 10/22 중 07:00 이전) + (간호일 10/23 중 07:00 이후)
+  ///
+  /// 새벽 0~7시 기록이 간호일로는 전날에 들어가 있기 때문이다.
+  static String _prevKey(String dateKey) {
+    final d = DateTime.parse(dateKey).subtract(const Duration(days: 1));
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  /// 'HH:MM' 이 07:00 보다 이른가. 시각이 없으면 이르지 않은 것으로 본다 —
+  /// 없는 것을 전날로 떠넘기면 조용히 사라진다.
+  static bool _beforeSeven(Map<String, dynamic> d) {
+    final t = (d['time'] ?? '').toString();
+    if (t.length < 5) return false;
+    return t.compareTo('07:00') < 0;
+  }
+
+  static Future<_DayData> _loadDay(String dateKey, bool calendarDay) async {
     final db = FirebaseFirestore.instance;
 
-    final results = await Future.wait([
-      db.collection('patients').get(),
-      db.collection('meal_records').where('date', isEqualTo: dateKey).get(),
-      db.collection('water_records').where('date', isEqualTo: dateKey).get(),
-      db.collection('output_records').where('date', isEqualTo: dateKey).get(),
-      db.collection('daily_assessments').where('date', isEqualTo: dateKey).get(),
-      // 알림 기록에는 date 필드가 없고 발송 시각(sentAt)뿐이라 구간으로 찾는다.
-      // 한 필드 범위 조건이라 복합 색인이 필요 없다.
-      db
-          .collection('notification_log')
-          .where('sentAt',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(careDayStart(dateKey)))
-          .where('sentAt', isLessThan: Timestamp.fromDate(careDayEnd(dateKey)))
-          .orderBy('sentAt')
-          .get(),
-    ]);
+    final keys = calendarDay ? [_prevKey(dateKey), dateKey] : [dateKey];
+
+    Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> load(
+        String col) async {
+      final snaps = await Future.wait(
+        keys.map((k) => db.collection(col).where('date', isEqualTo: k).get()),
+      );
+      if (!calendarDay) return snaps.first.docs;
+      // 앞 간호일에서는 07시 이전만, 그날 간호일에서는 07시 이후만 가져온다.
+      return [
+        ...snaps[0].docs.where((d) => _beforeSeven(d.data())),
+        ...snaps[1].docs.where((d) => !_beforeSeven(d.data())),
+      ];
+    }
+
+    final dayStart = calendarDay
+        ? DateTime.parse(dateKey)
+        : careDayStart(dateKey);
+    final dayEnd = calendarDay
+        ? DateTime.parse(dateKey).add(const Duration(days: 1))
+        : careDayEnd(dateKey);
+
+    // 한꺼번에 띄워 두고 받는다. 순서대로 await 하면 네 번 왕복한다.
+    final patientsF = db.collection('patients').get();
+    final mealsF = load('meal_records');
+    final watersF = load('water_records');
+    final outputsF = load('output_records');
+    // 간호 평가는 간호일마다 한 장이라 달력 하루로 쪼갤 수 없다.
+    // 그날 간호일 것을 그대로 쓴다.
+    final assessF =
+        db.collection('daily_assessments').where('date', isEqualTo: dateKey).get();
+    // 알림 기록에는 date 필드가 없고 발송 시각(sentAt)뿐이라 구간으로 찾는다.
+    // 한 필드 범위 조건이라 복합 색인이 필요 없다.
+    final alertsF = db
+        .collection('notification_log')
+        .where('sentAt', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+        .where('sentAt', isLessThan: Timestamp.fromDate(dayEnd))
+        .orderBy('sentAt')
+        .get();
+
+    final patientsSnap = await patientsF;
+    final meals = await mealsF;
+    final waters = await watersF;
+    final outputs = await outputsF;
+    final assessSnap = await assessF;
+    final alertsSnap = await alertsF;
 
     final assessByPatient = <String, Map<String, dynamic>>{};
-    for (final d in results[4].docs) {
+    for (final d in assessSnap.docs) {
       final data = d.data();
       final pid = (data['patientId'] ?? '').toString();
       if (pid.isNotEmpty) assessByPatient[pid] = data;
@@ -292,7 +354,7 @@ class RecordExport {
     final patients = <_PatientRow>[];
     final details = <_DetailRow>[];
 
-    for (final doc in results[0].docs) {
+    for (final doc in patientsSnap.docs) {
       final patient = doc.data();
       // 숨긴 환자는 대시보드에서도 아래로 빠지므로 내보내기에서도 제외한다.
       if (patient['isActive'] == false) continue;
@@ -305,7 +367,7 @@ class RecordExport {
       var naturalMl = 0, catheterMl = 0, incontinenceMl = 0;
       var diaperGram = 0, urineMl = 0, stoolGram = 0, stoolCount = 0;
 
-      for (final m in results[1].docs) {
+      for (final m in meals) {
         final d = m.data();
         if (d['patientId'] != pid) continue;
 
@@ -347,7 +409,7 @@ class RecordExport {
         }
       }
 
-      for (final w in results[2].docs) {
+      for (final w in waters) {
         final d = w.data();
         if (d['patientId'] != pid) continue;
 
@@ -374,7 +436,7 @@ class RecordExport {
         ));
       }
 
-      for (final o in results[3].docs) {
+      for (final o in outputs) {
         final d = o.data();
         if (d['patientId'] != pid) continue;
 
@@ -453,7 +515,7 @@ class RecordExport {
     final pressureAlerts = <_PressureAlertRow>[];
     final sensorAlerts = <_SensorAlertRow>[];
 
-    for (final doc in results[5].docs) {
+    for (final doc in alertsSnap.docs) {
       final a = doc.data();
       final kind = (a['kind'] ?? '').toString();
       if (kind != 'pressure' && kind != 'fall' && kind != 'bedside') continue;

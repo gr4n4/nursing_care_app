@@ -61,6 +61,9 @@ class _StationPageState extends State<StationPage> {
     final today = DateTime.now();
     var start = today;
     var end = today;
+    // 하루를 어디서 끊을지. 화면은 늘 간호일(07시)로 세지만, 기관에 내는
+    // 자료는 달력 하루라야 말이 된다. 그래서 받는 쪽만 고를 수 있게 둔다.
+    var calendarDay = true;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -158,6 +161,51 @@ class _StationPageState extends State<StationPage> {
                         dateButton('종료', end, false),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '하루 기준',
+                      style: TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('달력 하루', textAlign: TextAlign.center),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('간호일', textAlign: TextAlign.center),
+                        ),
+                      ],
+                      selected: {calendarDay},
+                      onSelectionChanged: (v) =>
+                          setLocal(() => calendarDay = v.first),
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      calendarDay
+                          ? '00:00~24:00 로 끊습니다. 새벽 0~7시 기록이 그날에 '
+                              '들어가므로 화면 집계와 다를 수 있습니다.'
+                          : '07시~다음날 07시로 끊습니다. 화면 집계와 같습니다.',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1.45,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     Container(
                       width: double.infinity,
@@ -200,7 +248,8 @@ class _StationPageState extends State<StationPage> {
 
     setState(() => exporting = true);
     try {
-      await RecordExport.exportDates(_dateRange(start, end));
+      await RecordExport.exportDates(_dateRange(start, end),
+          calendarDay: calendarDay);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
