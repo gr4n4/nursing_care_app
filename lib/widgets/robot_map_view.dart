@@ -32,7 +32,7 @@ class _RobotMapViewState extends State<RobotMapView> {
   /// 안 막으면 도면이 가로폭을 꽉 채우며 세로로도 같이 커져서, 배차 화면에
   /// 들어오자마자 요청 목록이 화면 밖으로 밀려난다. 배차 화면의 주인공은
   /// 요청 목록이고 지도는 곁들이다.
-  static const double _maxHeight = 320;
+  static const double _maxHeight = 440;
 
   Timer? _tick;
   bool _open = true;
@@ -161,7 +161,14 @@ class _RobotMapViewState extends State<RobotMapView> {
                     child: Stack(
                       children: [
                         Positioned.fill(
-                          child: Image.asset(floor.asset, fit: BoxFit.fill),
+                          // 기본 품질로 줄이면 글자가 뭉개진다. 도면은
+                          // 원본이 1700px 인데 화면에서는 600px 쯤으로
+                          // 줄어들어, 방 이름이 읽히느냐가 여기서 갈린다.
+                          child: Image.asset(
+                            floor.asset,
+                            fit: BoxFit.fill,
+                            filterQuality: FilterQuality.medium,
+                          ),
                         ),
                         if (spot != null)
                           AnimatedPositioned(
@@ -183,6 +190,55 @@ class _RobotMapViewState extends State<RobotMapView> {
     );
   }
 
+  /// 도면을 화면 가득. 방 이름을 읽어야 할 때 쓴다.
+  void _showBig(FloorMap floor) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 8, 8),
+              child: Row(
+                children: [
+                  Text(
+                    floor.label,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: '닫기',
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              // 손가락으로 끌고 넓혀 볼 수 있게 한다.
+              child: InteractiveViewer(
+                maxScale: 5,
+                child: Image.asset(
+                  floor.asset,
+                  filterQuality: FilterQuality.high,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _bar(FloorMap floor, String? note) {
     return InkWell(
       onTap: () => setState(() => _open = !_open),
@@ -198,6 +254,31 @@ class _RobotMapViewState extends State<RobotMapView> {
                 color: AppColors.ink,
                 fontSize: 13.5,
                 fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 10),
+            // 줄여 놓으면 방 이름이 안 읽힌다. 크게 볼 길을 둔다.
+            InkWell(
+              onTap: () => _showBig(floor),
+              borderRadius: BorderRadius.circular(6),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.zoom_out_map_rounded,
+                        size: 15, color: AppColors.brand),
+                    SizedBox(width: 4),
+                    Text(
+                      '크게 보기',
+                      style: TextStyle(
+                        color: AppColors.brand,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             if (note != null) ...[
