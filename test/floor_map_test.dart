@@ -100,6 +100,30 @@ void main() {
     });
   });
 
+  group('스마트돌봄스페이스', () {
+    final space = FloorMap.builtIn['space']!;
+
+    test('waypoint 가 제 방 앞에 찍힌다', () {
+      // 평면도에서 1차는 맨 왼쪽, 4차는 맨 오른쪽이다. 벽으로만 맞췄을 때
+      // 이 둘이 좌우로 뒤집혀 나왔다 — 그래서 값으로 못 박는다.
+      final one = space.toPixel(-2.90, 22.22)!;
+      final four = space.toPixel(-3.10, -3.00)!;
+      expect(one.x, lessThan(four.x), reason: '1차가 4차보다 왼쪽이어야 한다');
+      expect(one.x, closeTo(427, 60));
+      expect(four.x, closeTo(1511, 60));
+    });
+
+    test('여섯 곳 모두 도면 안에 든다', () {
+      const pts = <String, List<double>>{
+        '1차': [-2.90, 22.22], '2차': [-3.00, 1.22], '3차': [-2.60, 8.02],
+        '4차': [-3.10, -3.00], '목욕': [-3.25, 16.42], '대기': [-7.90, 24.42],
+      };
+      pts.forEach((k, v) {
+        expect(space.toPixel(v[0], v[1]), isNotNull, reason: '$k 이 도면 밖');
+      });
+    });
+  });
+
   group('설정으로 덮어쓰기', () {
     test('문서가 없으면 코드에 둔 값을 쓴다', () {
       final m = FloorMap.fromDoc(null);

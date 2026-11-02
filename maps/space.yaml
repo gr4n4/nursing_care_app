@@ -1,0 +1,10 @@
+# 스마트돌봄스페이스. src/navigation2/nav2_bringup/maps/map_hy1 을 들여온 것.
+# (원본은 2025-05-07 파일. 벤더 디렉터리에 있어 섞이기 쉬우므로 maps/ 로 옮겼다)
+# 지도는 좌표와 짝이므로 config/space_waypoints.json 과 같이 움직여야 한다.
+image: space.pgm
+mode: trinary
+resolution: 0.05
+origin: [-22.3, -8.83, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.15

@@ -53,5 +53,32 @@
       ]
     },
     "planEdited": "복도/화장실 경계를 27px(63cm) 내려 넓혔다. 도면이 복도를 좁게 그려 라이다 벽과 안 맞았다."
+  },
+  "space": {
+    "map": "space",
+    "image": "assets/map/space.png",
+    "imageWidth": 1707,
+    "imageHeight": 921,
+    "pxPerMeterX": 42.986,
+    "pxPerMeterY": 42.986,
+    "transform": {
+      "a": -0.176358,
+      "b": -42.985529,
+      "c": 1381.788205,
+      "d": -42.985529,
+      "e": 0.176358,
+      "f": 228.195799
+    },
+    "anchor": "waypoint 6곳(1·2·3·4차·목욕·대기)",
+    "fittedAt": "2026-11-02",
+    "fittedFrom": {
+      "pgm": "space.pgm 685x938",
+      "resolution": 0.05,
+      "origin": [
+        -22.3,
+        -8.83,
+        0
+      ]
+    }
   }
 }
