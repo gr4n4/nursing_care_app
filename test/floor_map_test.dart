@@ -172,4 +172,60 @@ void main() {
       expect(p.at, isNotNull);
     });
   });
+
+  group('띄울 층 고르기', () {
+    final maps = FloorMap.builtIn;
+
+    FloorView view(String choice, String robotMap) =>
+        FloorView.resolve(maps: maps, choice: choice, robotMap: robotMap);
+
+    test('자동이면 로봇을 따라간다', () {
+      final v = view(FloorChoice.auto, 'lab_4F');
+      expect(v.shown, 'lab_4F');
+      expect(v.pinned, isFalse);
+      expect(v.onThisFloor, isTrue);
+    });
+
+    test('고른 층이 있으면 로봇이 뭐라 하든 그 층을 띄운다', () {
+      final v = view('ward_edit', 'space');
+      expect(v.shown, 'ward_edit');
+      expect(v.pinned, isTrue);
+    });
+
+    test('로봇이 다른 층에 있으면 점을 찍지 않는다', () {
+      // 이 시험이 이 묶음의 전부다. 고른 층에 다른 층 좌표를 그리면 두
+      // 지도의 원점이 달라 복도 밖에 로봇이 나타난다. 간호사가 그걸 보고
+      // 복도로 나간다 — 틀린 자리에 찍힌 점은 없는 점보다 나쁘다.
+      expect(view('ward_edit', 'space').onThisFloor, isFalse);
+      expect(view('ward_edit', 'lab_4F').onThisFloor, isFalse);
+      expect(view('space', 'ward_edit').onThisFloor, isFalse);
+    });
+
+    test('고른 층과 로봇이 같은 층이면 찍는다', () {
+      expect(view('space', 'space').onThisFloor, isTrue);
+    });
+
+    test('로봇이 어느 지도인지 모르면 어디에도 안 찍는다', () {
+      // 켜자마자, 아직 지도를 못 올린 때. 이름이 비었다고 아무 층에나
+      // 찍으면 안 된다.
+      expect(view(FloorChoice.auto, '').onThisFloor, isFalse);
+      expect(view('ward_edit', '').onThisFloor, isFalse);
+      // 그래도 뭐라도 띄운다. 빈 화면은 고장으로 읽힌다.
+      expect(view(FloorChoice.auto, '').shown, 'ward_edit');
+    });
+
+    test('보정이 없는 지도는 양쪽 모두 없는 것으로 친다', () {
+      // 로봇이 새 지도를 만들어 올렸는데 아직 보정을 안 한 때.
+      final v = view(FloorChoice.auto, 'ward_2026');
+      expect(v.shown, 'ward_edit');
+      expect(v.onThisFloor, isFalse);
+
+      // 설정에 사라진 이름이 남아 있는 때 — 고른 적 없는 것으로 치고
+      // 자동으로 돌아간다.
+      final w = view('지워진지도', 'space');
+      expect(w.pinned, isFalse);
+      expect(w.shown, 'space');
+      expect(w.onThisFloor, isTrue);
+    });
+  });
 }

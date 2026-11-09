@@ -60,40 +60,55 @@ class _RobotMapViewState extends State<RobotMapView> {
       initialData: FloorMap.builtIn,
       builder: (context, mapsSnap) {
         final maps = mapsSnap.data ?? FloorMap.builtIn;
-        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('robot_state')
-              .doc('current')
-              .snapshots(),
-          builder: (context, snap) {
-            final d = snap.data?.data();
+        return StreamBuilder<String>(
+          stream: FloorChoice.watch(),
+          initialData: FloorChoice.auto,
+          builder: (context, choiceSnap) {
+            final choice = choiceSnap.data ?? FloorChoice.auto;
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('robot_state')
+                  .doc('current')
+                  .snapshots(),
+              builder: (context, snap) {
+                final d = snap.data?.data();
 
-            // 어느 층 그림을 띄울지는 **좌표와 상관없이** 지도 이름으로 고른다.
-            //
-            // 예전에는 pose 가 없으면 이름까지 버리고 병동으로 떨어뜨렸다.
-            // 그래서 연구소에서 시험하는데 병동 도면이 떴다. 로봇이 자기
-            // 위치를 못 찾는 것과 어느 층에 있는지는 별개다.
-            final mapName = (d?['map'] ?? '').toString();
-            final floor = maps[mapName] ?? maps['ward_edit']!;
-            final known = maps.containsKey(mapName);
+                // 로봇이 "나는 이 지도 위에 있다"고 말한 이름. 좌표와는 별개다
+                // — 자기 위치를 못 찾아도(pose 가 null) 어느 층인지는 안다.
+                final robotMap = (d?['map'] ?? '').toString();
+                final robotKnown = maps.containsKey(robotMap);
 
-            final pose = RobotPose.fromDoc(d);
-            final spot = (pose == null || !known)
-                ? null
-                : floor.toPixel(pose.x, pose.y);
+                // 띄울 층과, 점을 찍어도 되는지. 규칙은 FloorView 에 있다 —
+                // 층을 손으로 골랐다고 좌표까지 옮겨 오면 안 되기 때문이다.
+                final view = FloorView.resolve(
+                  maps: maps,
+                  choice: choice,
+                  robotMap: robotMap,
+                );
+                final floor = maps[view.shown]!;
 
-            final age = pose?.at == null
-                ? null
-                : DateTime.now().difference(pose!.at!);
+                final pose = RobotPose.fromDoc(d);
+                final spot = (pose == null || !view.onThisFloor)
+                    ? null
+                    : floor.toPixel(pose.x, pose.y);
 
-            return _frame(
-              floor,
-              spot,
-              // 로봇이 보는 방향. 지도가 도면에 대해 돌아가 있어서 좌표와
-              // 같은 변환을 거쳐야 화살표가 맞는 데를 가리킨다.
-              pose?.yaw == null ? null : floor.headingOnImage(pose!.yaw!),
-              age == null || age > _fresh,
-              _note(snap, d, pose, mapName, known, spot),
+                final age = pose?.at == null
+                    ? null
+                    : DateTime.now().difference(pose!.at!);
+
+                return _frame(
+                  floor,
+                  maps,
+                  choice,
+                  view.pinned,
+                  spot,
+                  // 로봇이 보는 방향. 지도가 도면에 대해 돌아가 있어서 좌표와
+                  // 같은 변환을 거쳐야 화살표가 맞는 데를 가리킨다.
+                  pose?.yaw == null ? null : floor.headingOnImage(pose!.yaw!),
+                  age == null || age > _fresh,
+                  _note(snap, d, maps, pose, robotMap, robotKnown, view, spot),
+                );
+              },
             );
           },
         );
@@ -103,21 +118,33 @@ class _RobotMapViewState extends State<RobotMapView> {
 
   /// 점이 안 보일 때 왜 안 보이는지 한 줄로. 빈 지도만 띄워 두면
   /// 고장인지 원래 그런 건지 알 수가 없다.
+  ///
+  /// 손으로 층을 고른 경우를 먼저 가른다. 그때 점이 없는 것은 고장이 아니라
+  /// **로봇이 다른 층에 있어서**이고, 그 말을 해 주지 않으면 "지도가 고장났나"
+  /// 로 읽힌다.
   String? _note(
     AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snap,
     Map<String, dynamic>? d,
+    Map<String, FloorMap> maps,
     RobotPose? pose,
-    String mapName,
-    bool known,
+    String robotMap,
+    bool robotKnown,
+    FloorView view,
     ({double x, double y})? spot,
   ) {
     if (!snap.hasData) return '로봇 위치를 불러오는 중…';
     if (d == null) return '로봇이 아직 아무것도 올리지 않았습니다';
-    if (!known) {
-      return mapName.isEmpty
-          ? '로봇이 어느 지도에 있는지 아직 모릅니다'
-          : '보정하지 않은 지도입니다 ($mapName) — 병동 도면을 대신 띄웁니다';
+
+    if (!robotKnown) {
+      if (robotMap.isEmpty) return '로봇이 어느 지도에 있는지 아직 모릅니다';
+      return view.pinned
+          ? '로봇은 보정하지 않은 지도에 있습니다 ($robotMap)'
+          : '보정하지 않은 지도입니다 ($robotMap) — ${maps[view.shown]!.label} 도면을 대신 띄웁니다';
     }
+    if (!view.onThisFloor) {
+      return '로봇은 ${maps[robotMap]!.label}에 있습니다 — 점은 그 층에서만 보입니다';
+    }
+
     if (pose == null) return '로봇이 아직 자기 위치를 찾는 중입니다';
     if (spot == null) return '로봇이 도면 밖에 있습니다 — 지도 보정을 확인해 주세요';
     return null;
@@ -125,6 +152,9 @@ class _RobotMapViewState extends State<RobotMapView> {
 
   Widget _frame(
     FloorMap floor,
+    Map<String, FloorMap> maps,
+    String choice,
+    bool pinned,
     ({double x, double y})? spot,
     double? heading,
     bool stale,
@@ -141,7 +171,7 @@ class _RobotMapViewState extends State<RobotMapView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _bar(floor, note),
+          _bar(floor, maps, choice, pinned, note),
           if (_open)
             LayoutBuilder(
               builder: (context, c) {
@@ -239,7 +269,28 @@ class _RobotMapViewState extends State<RobotMapView> {
     );
   }
 
-  Widget _bar(FloorMap floor, String? note) {
+  /// 띄울 층을 바꾼다. 한 문서라 다른 화면에서도 같이 바뀐다.
+  Future<void> _pick(String floor) async {
+    try {
+      await FloorChoice.set(floor);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('층을 바꾸지 못했습니다: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Widget _bar(
+    FloorMap floor,
+    Map<String, FloorMap> maps,
+    String choice,
+    bool pinned,
+    String? note,
+  ) {
     return InkWell(
       onTap: () => setState(() => _open = !_open),
       child: Padding(
@@ -248,12 +299,60 @@ class _RobotMapViewState extends State<RobotMapView> {
           children: [
             Icon(Icons.map_outlined, size: 17, color: AppColors.inkDim),
             const SizedBox(width: 8),
-            Text(
-              floor.label,
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w800,
+            // 층 고르기. 평소에는 '자동'이라 로봇을 따라가지만, 로봇이 꺼져
+            // 있는 동안에는 마지막으로 돌던 층이 남아 있어 손으로 바꿔야 한다.
+            PopupMenuButton<String>(
+              tooltip: '층 고르기',
+              position: PopupMenuPosition.under,
+              onSelected: _pick,
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem<String>(
+                  value: FloorChoice.auto,
+                  checked: !pinned,
+                  child: const Text('자동 — 로봇을 따라갑니다'),
+                ),
+                const PopupMenuDivider(),
+                for (final e in maps.entries)
+                  CheckedPopupMenuItem<String>(
+                    value: e.key,
+                    checked: pinned && choice == e.key,
+                    child: Text(e.value.label),
+                  ),
+              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    floor.label,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Icon(Icons.arrow_drop_down_rounded,
+                      size: 20, color: AppColors.inkDim),
+                  // 왜 로봇을 안 따라가는지 한눈에 보이게 한다. 이게 없으면
+                  // 로봇이 다른 층에 있을 때 화면이 고장난 것처럼 읽힌다.
+                  if (pinned)
+                    Container(
+                      margin: const EdgeInsets.only(left: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.warnBg,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        '고정',
+                        style: TextStyle(
+                          color: AppColors.warn,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 10),

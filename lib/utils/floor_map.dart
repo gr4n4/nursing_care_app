@@ -164,6 +164,91 @@ class FloorMap {
       });
 }
 
+/// 배차 화면이 **어느 층 도면을 띄울지**.
+///
+/// 평소에는 [auto] 로 두면 된다. 로봇이 켜질 때 자기가 있는 층을 적으므로
+/// 화면이 알아서 따라간다.
+///
+/// 손으로 고르는 길을 둔 이유는 로봇이 **꺼져 있는 동안**이다. 그때 남아
+/// 있는 것은 마지막으로 돌던 층이라, 연구소에서 시험하고 끈 다음 날
+/// 병동에서 대시보드를 열면 연구소 도면이 떠 있다. 실제로 그랬다 —
+/// 2026-11 에 시연이 끝나고 나흘 동안 스마트돌봄스페이스가 떠 있었다.
+///
+/// **고른 값은 점을 옮기지 않는다.** 층을 골라도 로봇이 거기 있다고 말하지
+/// 않으면 점은 안 찍힌다. 연구소 좌표를 병동 도면에 그리면 두 지도의 원점이
+/// 달라 복도 밖에 로봇이 나타난다 — 틀린 자리에 찍힌 점은 없는 점보다 나쁘다.
+///
+/// 한 문서를 모두가 같이 본다. 널스스테이션 화면과 노트북이 서로 다른 층을
+/// 띄우고 있으면 "로봇 어디 있냐"를 두 번 묻게 된다.
+class FloorChoice {
+  /// 로봇이 올린 지도 이름을 따라간다.
+  static const String auto = 'auto';
+
+  static final DocumentReference<Map<String, dynamic>> _ref =
+      FirebaseFirestore.instance.doc('settings/robot_view');
+
+  /// 못 읽으면 [auto]. 설정을 못 읽었다고 화면이 빈 채로 있으면 안 된다.
+  static Stream<String> watch() => _ref.snapshots().map((s) {
+        final v = (s.data()?['floor'] ?? '').toString().trim();
+        return v.isEmpty ? auto : v;
+      }).handleError((Object e) {
+        debugPrint('배차 화면 층 설정 구독 실패: $e');
+      });
+
+  static Future<void> set(String floor) => _ref.set({
+        'floor': floor,
+        'updatedAt': FieldValue.serverTimestamp(),
+        '_설명': "배차 화면에 띄울 층. 'auto' 면 로봇이 올린 지도를 따라갑니다.",
+      }, SetOptions(merge: true));
+}
+
+/// 고른 값과 로봇이 말한 값을 합쳐 "무엇을 띄우고 점을 찍어도 되는가"를 낸다.
+///
+/// 위젯 안에 두지 않고 따로 뺀 이유는 [onThisFloor] 하나 때문이다. 이 규칙이
+/// 한 번 깨진 적이 있고(v2.7.3, 연구소에서 시험하는데 병동 도면이 떴다),
+/// 층을 손으로 고를 수 있게 되면서 틀릴 길이 더 늘었다. 시험으로 묶어 둔다.
+@immutable
+class FloorView {
+  /// 띄울 지도 이름.
+  final String shown;
+
+  /// 손으로 고른 것인가(= 로봇을 안 따라가는 중인가).
+  final bool pinned;
+
+  /// 로봇이 이 층에 있는가. **점을 찍어도 되는지가 이 값이다.**
+  final bool onThisFloor;
+
+  const FloorView({
+    required this.shown,
+    required this.pinned,
+    required this.onThisFloor,
+  });
+
+  /// [choice] 는 [FloorChoice.auto] 이거나 지도 이름,
+  /// [robotMap] 은 로봇이 `robot_state/current.map` 에 적은 이름이다.
+  ///
+  /// 보정이 없는 지도 이름은 양쪽 모두 **없는 것으로 친다** — 고른 값이면
+  /// 자동으로 돌아가고, 로봇 값이면 병동을 대신 띄운다. 그릴 수 없는 그림을
+  /// 고집하느니 뭐라도 띄우고 아래 한 줄로 알리는 편이 낫다.
+  static FloorView resolve({
+    required Map<String, FloorMap> maps,
+    required String choice,
+    required String robotMap,
+  }) {
+    final robotKnown = maps.containsKey(robotMap);
+    final pinned = choice != FloorChoice.auto && maps.containsKey(choice);
+    final shown = pinned ? choice : (robotKnown ? robotMap : 'ward_edit');
+    return FloorView(
+      shown: shown,
+      pinned: pinned,
+      // 로봇이 어느 지도에 있는지 모르면(이름이 비었거나 보정이 없으면)
+      // 어떤 층에도 찍지 않는다. 두 지도는 원점이 달라서, 다른 층 좌표를
+      // 그리면 복도 밖 엉뚱한 자리에 로봇이 나타난다.
+      onThisFloor: robotKnown && robotMap == shown,
+    );
+  }
+}
+
 /// 로봇이 지금 어디에 있는가. `robot_state/current` 한 문서를 읽은 결과.
 @immutable
 class RobotPose {
